@@ -1,4 +1,6 @@
+##
 # This is a shared workflow to be used across the organisation
+##
 
 name: Deployment via SSM
 
@@ -20,6 +22,9 @@ jobs:
     environment: ${{ inputs.environment }}
     container:
       image: ghcr.io/toumoro/tm-ansible:latest
+    permissions:
+      id-token: write
+      contents: read
     env:
       AWS_SSM_BUCKET: ${{ vars.AWS_SSM_BUCKET }}
       TM_INSTANCE_ID: ${{ vars.TM_INSTANCE_ID }}
@@ -31,6 +36,14 @@ jobs:
     - uses: actions/labeler@v6
       with:
         repo-token: ${{ secrets.token }}
+    #- name: Debug GitHub OIDC token
+    #  run: |
+    #       echo "Requesting OIDC token..."
+    #       TOKEN=$(curl -sSL \
+    #       -H "Authorization: Bearer $ACTIONS_ID_TOKEN_REQUEST_TOKEN" \
+    #       "$ACTIONS_ID_TOKEN_REQUEST_URL&audience=sts.amazonaws.com" \
+    #       | jq -r '.value')
+    #       echo "$TOKEN" | cut -d '.' -f2 | base64 --decode | jq
     - name: Setup AWS CLI
       uses: aws-actions/configure-aws-credentials@v4
       with:
@@ -40,7 +53,6 @@ jobs:
         role-to-assume: ${{ secrets.aws-deploy-role-arn }}
         role-duration-seconds: 1200
         special-characters-workaround: true
-
     - name: Deploy Docker
       run: |
         ansible-playbook -i /ansible/inventory/aws_ec2.yml \

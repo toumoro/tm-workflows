@@ -39,3 +39,21 @@ jobs:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           npx semantic-release
+
+      - name: Update floating tags
+        if: github.event_name == 'push'
+        run: |
+          VERSION=$(git describe --tags --abbrev=0)
+          CLEAN_VERSION=${VERSION#v}
+          
+          MAJOR=$(echo "$CLEAN_VERSION" | cut -d. -f1)
+          MINOR=$(echo "$CLEAN_VERSION" | cut -d. -f1,2)
+
+          git config user.name "github-actions"
+          git config user.email "github-actions@github.com"
+
+          git tag -f v$MAJOR
+          git push origin v$MAJOR --force
+
+          git tag -f v$MINOR
+          git push origin v$MINOR --force
