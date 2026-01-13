@@ -1,0 +1,60 @@
+# This is a shared workflow to be used across the organisation
+
+name: Deployment via SSM
+
+on:
+  workflow_call:
+    inputs:
+      environment:
+        required: true
+        type: string
+    secrets:
+      #aws-access-key:
+      #  required: true
+      aws-deploy-role-arn:
+        required: true
+
+jobs:
+  Deploy:
+    runs-on: ubuntu-latest
+    environment: ${{ inputs.environment }}
+    container:
+      image: ghcr.io/toumoro/tm-ansible:latest
+    env:
+      AWS_SSM_BUCKET: ${{ vars.AWS_SSM_BUCKET }}
+      TM_INSTANCE_ID: ${{ vars.TM_INSTANCE_ID }}
+      SERVER_USERNAME: ${{ vars.SERVER_USERNAME }}
+      PROJECT_CLIENT: ${{ vars.PROJECT_CLIENT }}
+    steps:
+    - name: Checkout client repo
+      uses: actions/checkout@v3
+    - uses: actions/labeler@v6
+      with:
+        repo-token: ${{ secrets.token }}
+    - name: Setup AWS CLI
+      uses: aws-actions/configure-aws-credentials@v4
+      with:
+        aws-region: ${{ vars.aws-region || 'ca-central-1' }}
+        #aws-access-key-id: ${{ vars.AWS_ACCESS_KEY_ID }}
+        #aws-secret-access-key: ${{ secrets.aws-access-key }}
+        role-to-assume: ${{ secrets.aws-deploy-role-arn }}
+        role-duration-seconds: 1200
+        special-characters-workaround: true
+
+    - name: Deploy Docker
+      run: |
+        ansible-playbook -i /ansible/inventory/aws_ec2.yml \
+            /ansible/playbooks/docker-deploy.yml \
+            -e "ansible_aws_ssm_bucket_name=${AWS_SSM_BUCKET}"
+    - name: Deploy Traefik
+      run: |
+        ansible-playbook -i /ansible/inventory/aws_ec2.yml \
+            /ansible/playbooks/traefik-deploy.yml \
+            -e "ansible_aws_ssm_bucket_name=${AWS_SSM_BUCKET}" \
+            --become --become-user ${SERVER_USERNAME} 
+    - name: Deploy TYPO3
+      run: |
+        ansible-playbook -i /ansible/inventory/aws_ec2.yml \
+            /ansible/playbooks/typo3-deploy.yml \
+            -e "ansible_aws_ssm_bucket_name=${AWS_SSM_BUCKET}" \
+            --become --become-user ${SERVER_USERNAME}
