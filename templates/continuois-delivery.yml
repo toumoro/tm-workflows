@@ -1,0 +1,25 @@
+name: Application Delivery via SSM
+
+on:
+  push:
+    branches:
+      - prod
+      - staging
+      - migration
+
+permissions:
+  id-token: write
+  contents: read
+
+jobs:
+  ContinuousDelivery:
+    uses: toumoro/tm-workflows/.github/workflows/deploy-ssm.yml@v1
+    with:
+      environment: >-
+        ${{ github.ref_name == 'prod' && 'production'
+            || github.ref_name == 'staging' && 'staging'
+            || github.ref_name == 'migration' && 'migration'
+        }}
+    secrets: 
+      #aws-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+      aws-deploy-role-arn: ${{ secrets.AWS_OIDC_ROLE_ARN }}
