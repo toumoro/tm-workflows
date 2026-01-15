@@ -30,6 +30,7 @@ jobs:
       TM_INSTANCE_ID: ${{ vars.TM_INSTANCE_ID }}
       SERVER_USERNAME: ${{ vars.SERVER_USERNAME }}
       PROJECT_CLIENT: ${{ vars.PROJECT_CLIENT }}
+      TM_TYPO3_CONTAINER: ${{ vars.TM_TYPO3_CONTAINER }}
     steps:
     - name: Checkout client repo
       uses: actions/checkout@v3
