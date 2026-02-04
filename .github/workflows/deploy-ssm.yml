@@ -32,7 +32,8 @@ jobs:
       PROJECT_CLIENT: ${{ vars.PROJECT_CLIENT }}
       TM_TYPO3_CONTAINER: ${{ vars.TM_TYPO3_CONTAINER }}
       DOCKER_PULL_POLICY: ${{ vars.DOCKER_PULL_POLICY }}
-      DOCKER_BUILD_POLICY: ${{ vars.DOCKER_BUILD_POLICY }} 
+      DOCKER_BUILD_POLICY: ${{ vars.DOCKER_BUILD_POLICY }}
+      ANSIBLE_VERBOSITY: ${{ vars.ANSIBLE_VERBOSITY }}
     steps:
     - name: Checkout client repo
       uses: actions/checkout@v3
