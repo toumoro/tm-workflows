@@ -34,6 +34,7 @@ jobs:
       DOCKER_PULL_POLICY: ${{ vars.DOCKER_PULL_POLICY }}
       DOCKER_BUILD_POLICY: ${{ vars.DOCKER_BUILD_POLICY }}
       ANSIBLE_VERBOSITY: ${{ vars.ANSIBLE_VERBOSITY }}
+      ANSIBLE_PYTHON_INTERPRETER: ${{ vars.ANSIBLE_PYTHON_INTERPRETER || 'auto_silent' }}
     steps:
     - name: Checkout client repo
       uses: actions/checkout@v3
