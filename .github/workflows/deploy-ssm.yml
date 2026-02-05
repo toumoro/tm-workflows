@@ -61,6 +61,7 @@ jobs:
     - name: Deploy Docker
       run: |
         ansible-playbook -i /ansible/inventory/ssm.ini \
+            -e ansible_python_interpreter=${ANSIBLE_PYTHON_INTERPRETER} \
             /ansible/playbooks/docker-deploy.yml
     #- name: Deploy Traefik
     #  run: |
@@ -70,5 +71,6 @@ jobs:
     - name: Deploy TYPO3
       run: |
         ansible-playbook -i /ansible/inventory/ssm.ini \
+            -e ansible_python_interpreter=${ANSIBLE_PYTHON_INTERPRETER} \
             /ansible/playbooks/typo3-deploy.yml \
             --become --become-user ${SERVER_USERNAME}
