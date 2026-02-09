@@ -50,7 +50,7 @@ jobs:
     # Export the database from the source environment   
     - name: Export DB ${TM_DB_ENV_TYPE}
       run: |
-        ansible-playbook -i tm-ansible/inventory/ecs_db_export_inventory.aws_ec2.yml \
+        ansible-playbook -i /ansible/inventory/ssm.ini \
         -e env_type=${TM_DB_ENV_TYPE} \
         tm-ansible/playbooks/db-export.yml --limit ecs_db_export_instance
 
