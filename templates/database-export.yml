@@ -1,11 +1,9 @@
 name: Export/Import Database to S3 via SSM
 
 on:
-  push:
-    branches:
-      - prod
-      - staging
-      - migration
+  schedule:
+    - cron: '0 9 * * 1-5' # Tous les jours a 5h du matin sauf les weekends
+  workflow_dispatch:
 
 permissions:
   id-token: write
