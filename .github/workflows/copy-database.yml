@@ -28,7 +28,6 @@ jobs:
     env:
       AWS_REGION: ${{ vars.AWS_REGION  || 'ca-central-1' }}
       TM_DB_ENV_TYPE: ${{ vars.TM_DB_ENV_TYPE }} # onpremise, ecs, ec2
-      AWS_OIDC_ROLE_ARN: ${{ secrets.TM_CLIENT_AWS_OIDC_ROLE_ARN }}
       AWS_SSM_BUCKET: ${{ vars.TM_SSM_TRANSFER_BUCKET_NAME }}
       DUMP_TYPE: partial
       SERVER_USERNAME: ${{ vars.SERVER_USER_NAME }}
@@ -44,7 +43,7 @@ jobs:
       uses: aws-actions/configure-aws-credentials@v4
       with:
         aws-region: ${AWS_REGION}
-        role-to-assume: ${{ secrets.aws-deploy-role-arn }}
+        role-to-assume: ${{ secrets.aws-oidc-role-arn }}
         role-duration-seconds: 1200
         special-characters-workaround: true
 
