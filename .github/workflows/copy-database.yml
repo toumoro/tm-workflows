@@ -1,0 +1,93 @@
+##
+# This is a shared workflow to be used across the organisation
+##
+
+name: Copy Database
+
+on:
+  workflow_call:
+    inputs:
+      environment:
+        required: true
+        type: string
+    secrets:
+      aws-oidc-role-arn:
+        required: true
+      tm-tmdt-aws-oidc-role-arn:
+        required: true
+
+jobs:
+  Export:
+    runs-on: ubuntu-latest
+    environment: ${{ inputs.environment }}
+    container:
+      image: ghcr.io/toumoro/tm-ansible:latest
+    permissions:
+      id-token: write
+      contents: read
+    env:
+      AWS_REGION: ${{ vars.AWS_REGION  || 'ca-central-1' }}
+      TM_DB_ENV_TYPE: ${{ vars.TM_DB_ENV_TYPE }} # onpremise, ecs, ec2
+      AWS_SSM_BUCKET: ${{ vars.TM_SSM_TRANSFER_BUCKET_NAME }}
+      DUMP_TYPE: partial
+      SERVER_USERNAME: ${{ vars.SERVER_USER_NAME }}
+      CLIENT_PROJECT: ${{ vars.TM_TMDT_PROJECT_NAME }}
+      DUMP_INSTANCE_NAME: ${{ vars.TM_DUMP_INSTANCE_NAME }}
+      ANSIBLE_VERBOSITY: ${{ vars.ANSIBLE_VERBOSITY }}
+      ANSIBLE_PYTHON_INTERPRETER: ${{ vars.ANSIBLE_PYTHON_INTERPRETER || 'auto_silent' }}
+    steps:
+    - name: Checkout client repo
+      uses: actions/checkout@v4
+
+    - name: Setup AWS CLI
+      uses: aws-actions/configure-aws-credentials@v4
+      with:
+        aws-region: ${AWS_REGION}
+        role-to-assume: ${{ secrets.aws-oidc-role-arn }}
+        role-duration-seconds: 1200
+        special-characters-workaround: true
+
+    # Export the database from the source environment   
+    - name: Export DB ${TM_DB_ENV_TYPE}
+      run: |
+        ansible-playbook -i /ansible/inventory/ssm.ini \
+        -e env_type=${TM_DB_ENV_TYPE} \
+        tm-ansible/playbooks/db-export.yml --limit ecs_db_export_instance
+
+    - name: Save artifact
+      uses: actions/upload-artifact@v4
+      with:
+        name: db-dump
+        path: ./dump/latest.sql.gz
+        retention-days: 1
+
+  Upload:
+    runs-on: ubuntu-latest
+    permissions:
+      id-token: write
+      contents: read
+    needs: Export
+    env:
+      AWS_REGION:  ${{ vars.AWS_REGION  || 'ca-central-1' }}
+      BUCKET_NAME: ${{ vars.TM_TMDT_BUCKET_NAME }}
+      S3_KEY: ${{ vars.TM_TMDT_PROJECT_NAME }}/latest.sql
+
+    steps:
+      - name: Download artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: db-dump
+          path: .
+
+      - name: Setup AWS CLI
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+            aws-region: ${AWS_REGION}
+            role-to-assume: ${{ secrets.tm-tmdt-aws-oidc-role-arn }}
+            role-duration-seconds: 1200
+            special-characters-workaround: true
+
+      - name: Upload to S3
+        run: |
+          gzip -d latest.sql.gz
+          aws s3 cp latest.sql s3://${BUCKET_NAME}/${S3_KEY}
