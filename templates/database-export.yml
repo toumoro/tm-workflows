@@ -12,12 +12,6 @@ permissions:
 jobs:
   DatabaseExport:
     uses: toumoro/tm-workflows/.github/workflows/copy-database.yml@v1
-    with:
-      environment: >-
-        ${{ github.ref_name == 'prod' && 'production'
-            || github.ref_name == 'staging' && 'staging'
-            || github.ref_name == 'migration' && 'migration'
-        }}
     secrets: 
       aws-oidc-role-arn: ${{ secrets.TM_CLIENT_AWS_OIDC_ROLE_ARN }}
       tm-tmdt-aws-oidc-role-arn: ${{ secrets.TM_TMDT_AWS_OIDC_ROLE_ARN }}

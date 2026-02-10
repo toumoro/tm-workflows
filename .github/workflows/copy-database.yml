@@ -6,10 +6,6 @@ name: Copy Database
 
 on:
   workflow_call:
-    inputs:
-      environment:
-        required: true
-        type: string
     secrets:
       aws-oidc-role-arn:
         required: true
@@ -19,7 +15,6 @@ on:
 jobs:
   Export:
     runs-on: ubuntu-latest
-    environment: ${{ inputs.environment }}
     container:
       image: ghcr.io/toumoro/tm-ansible:latest
     permissions:
@@ -53,7 +48,7 @@ jobs:
       run: |
         ansible-playbook -i /ansible/inventory/ssm.ini \
         -e env_type=${TM_DB_ENV_TYPE} \
-        tm-ansible/playbooks/db-export.yml --limit ecs_db_export_instance
+        /ansible/playbooks/db-export.yml
 
     - name: Save artifact
       uses: actions/upload-artifact@v4
