@@ -29,6 +29,7 @@ jobs:
       AWS_REGION: ${{ vars.AWS_REGION  || 'ca-central-1' }}
       TM_DB_ENV_TYPE: ${{ vars.TM_DB_ENV_TYPE }} # onpremise, ecs, ec2
       AWS_SSM_BUCKET: ${{ vars.TM_SSM_TRANSFER_BUCKET_NAME }}
+      TM_INSTANCE_ID: ${{ vars.TM_INSTANCE_ID }}
       DUMP_TYPE: partial
       SERVER_USERNAME: ${{ vars.SERVER_USER_NAME }}
       CLIENT_PROJECT: ${{ vars.TM_TMDT_PROJECT_NAME }}
@@ -42,13 +43,13 @@ jobs:
     - name: Setup AWS CLI
       uses: aws-actions/configure-aws-credentials@v4
       with:
-        aws-region: ${AWS_REGION}
+        aws-region: ${{ env.AWS_REGION }}
         role-to-assume: ${{ secrets.aws-oidc-role-arn }}
         role-duration-seconds: 1200
         special-characters-workaround: true
 
     # Export the database from the source environment   
-    - name: Export DB ${TM_DB_ENV_TYPE}
+    - name: Export DB
       run: |
         ansible-playbook -i /ansible/inventory/ssm.ini \
         -e env_type=${TM_DB_ENV_TYPE} \
@@ -82,7 +83,7 @@ jobs:
       - name: Setup AWS CLI
         uses: aws-actions/configure-aws-credentials@v4
         with:
-            aws-region: ${AWS_REGION}
+            aws-region: ${{ env.AWS_REGION }}
             role-to-assume: ${{ secrets.tm-tmdt-aws-oidc-role-arn }}
             role-duration-seconds: 1200
             special-characters-workaround: true
