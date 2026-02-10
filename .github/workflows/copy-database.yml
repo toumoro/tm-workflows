@@ -50,10 +50,6 @@ jobs:
         -e env_type=${TM_DB_ENV_TYPE} \
         /ansible/playbooks/db-export.yml
 
-    - name: Debug dump dir
-      run: |
-        find / -iname latest.sql.gz; pwd
-
     - name: Save artifact
       uses: actions/upload-artifact@v4
       with:
