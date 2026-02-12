@@ -1,4 +1,4 @@
-name: Export/Import Database to S3 via SSM
+name: Export/Import Database to S3
 
 on:
   schedule:
