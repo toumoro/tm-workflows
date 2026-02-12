@@ -47,6 +47,7 @@ jobs:
     - name: Export DB
       run: |
         ansible-playbook -i /ansible/inventory/ssm.ini \
+        -e ansible_python_interpreter=${ANSIBLE_PYTHON_INTERPRETER} \
         -e env_type=${TM_DB_ENV_TYPE} \
         /ansible/playbooks/db-export.yml
 
