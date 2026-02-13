@@ -92,4 +92,4 @@ jobs:
       - name: Upload to S3
         run: |
           gzip -d latest.sql.gz
-          aws s3 cp latest.sql s3://${BUCKET_NAME}/${S3_KEY}
+          aws s3 cp latest.sql s3://${{ env.BUCKET_NAME }}/${{ env.S3_KEY }}
