@@ -6,6 +6,10 @@ name: Copy Database
 
 on:
   workflow_call:
+    inputs:
+      environment:
+        required: true
+        type: string
     secrets:
       aws-oidc-role-arn:
         required: true
@@ -15,6 +19,7 @@ on:
 jobs:
   Export:
     runs-on: ubuntu-latest
+    environment: ${{ inputs.environment }}
     container:
       image: ghcr.io/toumoro/tm-ansible:latest
     permissions:
