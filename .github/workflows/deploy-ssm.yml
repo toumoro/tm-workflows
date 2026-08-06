@@ -21,7 +21,7 @@ jobs:
     runs-on: ubuntu-latest
     environment: ${{ inputs.environment }}
     container:
-      image: ghcr.io/toumoro/tm-ansible:latest
+      image: ghcr.io/toumoro/tm-ansible:v1.9.0
     permissions:
       id-token: write
       contents: read
