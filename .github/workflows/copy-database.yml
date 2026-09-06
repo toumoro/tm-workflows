@@ -48,10 +48,11 @@ jobs:
         role-duration-seconds: 1200
         special-characters-workaround: true
 
-    # Export the database from the source environment   
+    # Export the database from the source environment
     - name: Export DB
       run: |
         ansible-playbook -i /ansible/inventory/ssm.ini \
+        -i /ansible/inventory/${TM_DB_ENV_TYPE}_db_export_inventory.aws_ec2.yml \
         -e ansible_python_interpreter=${ANSIBLE_PYTHON_INTERPRETER} \
         -e env_type=${TM_DB_ENV_TYPE} \
         /ansible/playbooks/db-export.yml
