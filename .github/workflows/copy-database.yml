@@ -48,6 +48,13 @@ jobs:
         role-duration-seconds: 1200
         special-characters-workaround: true
 
+    - name: Start bastion
+      if: ${{ vars.TM_DB_ENV_TYPE == 'ecs' }}
+      run: |
+        ansible-playbook -i /ansible/inventory/bastion_auto_inventory.aws_ec2.yml \
+        -e state=running \
+        /ansible/playbooks/aws/manage-instance.yml
+
     # Export the database from the source environment
     - name: Export DB
       run: |
@@ -56,6 +63,13 @@ jobs:
         -e ansible_python_interpreter=${ANSIBLE_PYTHON_INTERPRETER} \
         -e env_type=${TM_DB_ENV_TYPE} \
         /ansible/playbooks/db-export.yml
+
+    - name: Stop bastion
+      if: ${{ vars.TM_DB_ENV_TYPE == 'ecs' }}
+      run: |
+        ansible-playbook -i /ansible/inventory/bastion_auto_inventory.aws_ec2.yml \
+        -e state=stopped \
+        /ansible/playbooks/aws/manage-instance.yml
 
     - name: Save artifact
       uses: actions/upload-artifact@v4
