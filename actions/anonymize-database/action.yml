@@ -1,0 +1,51 @@
+##
+# Anonymise un dump MySQL TYPO3 dans une base jetable et produit un nouveau fichier SQL.
+# Règles : rules/typo3-core.yml, complétées par le fichier du projet.
+##
+
+name: Anonymize database
+description: Anonymise un dump TYPO3 selon les règles core et projet
+
+inputs:
+  dump:
+    description: Dump source (.sql ou .sql.gz)
+    required: true
+  output:
+    description: Fichier SQL anonymisé à produire
+    required: false
+    default: latest_anonymized.sql
+  project-rules:
+    description: Règles propres au projet (facultatif)
+    required: false
+    default: .github/anonymize.yml
+  mysql-image:
+    description: Image MySQL de la base jetable
+    required: false
+    default: mysql:8.0
+
+runs:
+  using: composite
+  steps:
+    - name: Setup Python
+      uses: actions/setup-python@v5
+      with:
+        python-version: '3.12'
+
+    - name: Install dependencies
+      shell: bash
+      run: pip install --quiet pyyaml==6.0.2
+
+    - name: Anonymize
+      shell: bash
+      env:
+        DUMP: ${{ inputs.dump }}
+        OUTPUT: ${{ inputs.output }}
+        PROJECT_RULES: ${{ inputs.project-rules }}
+        MYSQL_IMAGE: ${{ inputs.mysql-image }}
+      run: |
+        python "$GITHUB_ACTION_PATH/anonymize.py" \
+          --dump "$DUMP" \
+          --output "$OUTPUT" \
+          --core-rules "$GITHUB_ACTION_PATH/rules/typo3-core.yml" \
+          --project-rules "$PROJECT_RULES" \
+          --mysql-image "$MYSQL_IMAGE"

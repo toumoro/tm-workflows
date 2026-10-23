@@ -1,0 +1,140 @@
+##
+# Règles d'anonymisation communes à tous les projets TYPO3.
+#
+# Chaque table du dump doit être classée, ici ou dans le fichier du projet
+# (.github/anonymize.yml), qui l'emporte sur ce fichier :
+#   keep      conservée telle quelle
+#   truncate  vidée
+#   update    colonnes remplacées (les colonnes absentes sont ignorées)
+#
+# Stratégies : email, username, first_name, last_name, full_name (basées sur l'uid),
+# empty, null, invalid_password, {fixed: valeur}, {sql: expression}.
+#
+# Les tables absentes du dump sont ignorées : une règle peut couvrir
+# plusieurs versions de TYPO3 ou des extensions non installées.
+##
+
+settings:
+  email_scan: warn
+  allowed_email_domains:
+    - example.invalid
+
+tables:
+  # --- Utilisateurs et sessions -------------------------------------------
+  fe_users:
+    update:
+      username: username
+      email: email
+      name: full_name
+      first_name: first_name
+      middle_name: empty
+      last_name: last_name
+      password: invalid_password
+      felogin_forgotHash: empty
+      mfa: null
+      uc: null
+      description: empty
+      title: empty
+      address: empty
+      zip: empty
+      city: empty
+      country: empty
+      telephone: empty
+      fax: empty
+      www: empty
+      company: empty
+  be_users:            # exclue du dump « partial », traitée si présente
+    update:
+      username: username
+      email: email
+      realName: full_name
+      password: invalid_password
+      mfa: null
+      uc: null
+  fe_groups: keep
+  be_groups: keep
+  fe_sessions: truncate
+  be_sessions: truncate
+
+  # --- Traces et données techniques ----------------------------------------
+  sys_log: truncate
+  sys_history: truncate
+  sys_http_report: truncate
+  sys_lockedrecords: truncate
+  sys_preview: truncate
+  sys_messenger_messages: truncate
+  sys_note: truncate
+  sys_refindex: truncate   # ref_string peut contenir des courriels ; à reconstruire après import
+  "cache_*": truncate
+  "cf_*": truncate
+  "index_*": truncate      # indexed_search
+
+  # --- Contenu et structure -------------------------------------------------
+  pages: keep
+  tt_content: keep
+  backend_layout: keep
+  sys_template: keep
+  sys_category: keep
+  sys_category_record_mm: keep
+  sys_collection: keep
+  sys_collection_entries: keep
+  sys_language: keep
+  sys_news: keep
+  sys_redirect: keep
+  sys_domain: keep
+  form_definition: keep
+
+  # --- Fichiers ---------------------------------------------------------------
+  sys_file: keep
+  sys_file_collection: keep
+  sys_file_metadata:
+    update:                # champs de EXT:filemetadata, ignorés si absents
+      creator: empty
+      creator_tool: empty
+      publisher: empty
+      location_country: empty
+      location_region: empty
+      location_city: empty
+      latitude: empty
+      longitude: empty
+  sys_file_processedfile: keep
+  sys_file_reference: keep
+  sys_file_storage: keep
+  sys_filemounts: keep
+
+  # --- Backend et configuration ---------------------------------------------
+  be_dashboards: keep
+  sys_be_shortcuts: keep
+  sys_be_shortcuts_group: keep
+  sys_csp_resolution: keep
+  sys_reaction: keep
+  sys_webhook: keep
+  sys_registry: keep
+  sys_workspace: keep
+  sys_workspace_stage: keep
+  sys_action: keep
+  sys_action_asgr_mm: keep
+  tx_impexp_presets: keep
+  tx_linkvalidator_link: keep
+  tx_extensionmanager_domain_model_extension: keep
+  tx_extensionmanager_domain_model_repository: keep
+  tx_scheduler_task:
+    update:
+      tx_reports_notification_email: empty
+  tx_scheduler_task_group: keep
+
+  # --- Extensions courantes ---------------------------------------------------
+  tx_solr_statistics: truncate     # IP, feuser_id, mots-clés
+  tx_solr_last_searches: truncate
+  tx_solr_eventqueue_item: keep
+  tx_solr_indexqueue_item: keep
+  tx_solr_indexqueue_indexing_property: keep
+  tx_powermail_domain_model_mail: truncate
+  tx_powermail_domain_model_answer: truncate
+
+  # --- Extensions Toumoro -----------------------------------------------------
+  toumoro_accordionlist_accordions: keep
+  toumoro_buttonlist_buttons: keep
+  toumoro_navigationlist_navigations: keep
+  toumoro_taglist_tags: keep
+  toumoro_tilelist_tiles: keep

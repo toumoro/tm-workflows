@@ -1,0 +1,22 @@
+##
+# Exemple de règles propres à un projet, à copier dans .github/anonymize.yml
+# du dépôt client. Ces règles l'emportent sur actions/anonymize-database/rules/typo3-core.yml.
+#
+# Lancer une première fois sans ce fichier : le rapport liste les tables
+# du projet qui n'ont pas encore de règle.
+##
+
+settings:
+  email_scan: warn          # warn | block | off
+  allowed_email_domains:    # adresses publiques assumées dans le contenu
+    - client.example
+
+tables:
+  tx_monextension_domain_model_comment: truncate
+  "tx_monextension_domain_model_rate*": keep
+  tx_monextension_domain_model_member:
+    update:
+      email: email
+      name: full_name
+      phone: empty
+      notes: {fixed: "Note fictive"}
