@@ -8,7 +8,7 @@
 ##
 
 settings:
-  email_scan: warn          # warn | block | off
+  email_scan: warn          # warn | block | off, ou replace : adresses du contenu remplacées par des fictives
   allowed_email_domains:    # adresses publiques assumées dans le contenu
     - client.example
   # key_column: id          # colonne des stratégies email, username… (défaut uid)

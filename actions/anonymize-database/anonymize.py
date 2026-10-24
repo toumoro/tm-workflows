@@ -12,6 +12,7 @@ toute personne ayant accès au dépôt.
 import argparse
 import fnmatch
 import gzip
+import hashlib
 import os
 import re
 import secrets
@@ -27,8 +28,12 @@ SYSTEM_DATABASES = {"information_schema", "mysql", "performance_schema", "sys", 
 
 IDENTIFIER = re.compile(r"^[A-Za-z0-9_]+$")
 TABLE_PATTERN = re.compile(r"^[A-Za-z0-9_*?\[\]]+$")
-EMAIL = re.compile(r"[A-Za-z0-9._%+-]+@([A-Za-z0-9-]+(?:\.[A-Za-z0-9-]+)*\.([A-Za-z]{2,}))")
+# Sur des octets : les courriels sont en ASCII quel que soit le jeu de caractères de la colonne.
+EMAIL = re.compile(rb"[A-Za-z0-9._%+-]+@([A-Za-z0-9-]+(?:\.[A-Za-z0-9-]+)*\.([A-Za-z]{2,}))")
 FILE_EXTENSIONS = {"png", "jpg", "jpeg", "gif", "svg", "webp", "avif"}  # ex. logo@2x.png
+# Valeur PHP sérialisée : changer la longueur d'une chaîne la rendrait illisible.
+SERIALIZED = re.compile(rb's:[0-9]+:"')
+SERIALIZED_SQL = "'s:[0-9]+:\"'"
 
 TEXT_TYPES = {"char", "varchar", "tinytext", "text", "mediumtext", "longtext"}
 NUMERIC_TYPES = {"tinyint", "smallint", "mediumint", "int", "bigint", "decimal", "float", "double", "bit"}
@@ -56,7 +61,7 @@ STATIC_STRATEGIES = {
 }
 
 DEFAULT_SETTINGS = {
-    "email_scan": "warn",  # warn | block | off
+    "email_scan": "warn",  # warn | block | replace | off
     "key_column": "uid",   # colonne des stratégies basées sur la clé
     "allowed_email_domains": ["example.invalid"],
 }
@@ -108,8 +113,8 @@ def load_rules(path, label):
                 raise AnonymizeError(f"{label} : nom de colonne invalide '{table}.{column}'")
             validate_strategy(strategy, f"{label} : {table}.{column}")
 
-    if settings.get("email_scan", "warn") not in ("warn", "block", "off"):
-        raise AnonymizeError(f"{label} : settings.email_scan doit valoir warn, block ou off")
+    if settings.get("email_scan", "warn") not in ("warn", "block", "replace", "off"):
+        raise AnonymizeError(f"{label} : settings.email_scan doit valoir warn, block, replace ou off")
     if "key_column" in settings and not IDENTIFIER.match(str(settings["key_column"])):
         raise AnonymizeError(f"{label} : settings.key_column invalide")
     return {"tables": tables, "settings": settings}
@@ -335,30 +340,92 @@ def apply_update(db, table, columns, updates, key):
     log(f"  update    {table:<45} {rows} lignes, {len(present)} colonnes{note}")
 
 
-def scan_emails(db, tables, plan, allowed_domains):
-    """Compte les adresses hors domaines autorisés, sans jamais les afficher."""
-    def allowed(domain):
-        return any(domain == d or domain.endswith("." + d) for d in allowed_domains)
+def split_emails(value, allowed_domains):
+    """Sépare les courriels d'une valeur : (hors domaines autorisés, laissés intacts)."""
+    foreign, kept = [], []
+    for match in EMAIL.finditer(value):
+        domain, tld = match.group(1).decode().lower(), match.group(2).decode().lower()
+        allowed = any(domain == d or domain.endswith("." + d) for d in allowed_domains)
+        (kept if tld in FILE_EXTENSIONS or allowed else foreign).append(match.group(0))
+    return foreign, kept
 
-    findings = []
+
+def scanned_columns(tables, plan):
+    """Colonnes texte non remplacées des tables conservées."""
     for table, rule, _ in plan:
         if rule == "truncate":
             continue
         updated = set(rule["update"]) if isinstance(rule, dict) else set()
         for column, (data_type, _) in tables[table].items():
-            if data_type not in TEXT_TYPES or column in updated:
-                continue
-            rows = db.query(f"SELECT `{column}` FROM `{table}` WHERE `{column}` LIKE '%@%'",
-                            f"Analyse de {table}.{column}")
-            count = 0
-            for (value,) in rows:
-                for match in EMAIL.finditer(value):
-                    domain, tld = match.group(1).lower(), match.group(2).lower()
-                    if tld not in FILE_EXTENSIONS and not allowed(domain):
-                        count += 1
-            if count:
-                findings.append((table, column, count))
+            if data_type in TEXT_TYPES and column not in updated:
+                yield table, column
+
+
+def column_values(db, table, column):
+    """Valeurs contenant @, lues en hexadécimal : le mode batch de mysql échappe retours de ligne et tabulations."""
+    rows = db.query(f"SELECT HEX(`{column}`) FROM `{table}` WHERE `{column}` LIKE '%@%'",
+                    f"Analyse de {table}.{column}")
+    return [bytes.fromhex(value) for (value,) in rows]
+
+
+def scan_emails(db, tables, plan, allowed_domains):
+    """Compte les adresses hors domaines autorisés, sans jamais les afficher."""
+    findings = []
+    for table, column in scanned_columns(tables, plan):
+        count = sum(len(split_emails(value, allowed_domains)[0]) for value in column_values(db, table, column))
+        if count:
+            findings.append((table, column, count))
     return findings
+
+
+def fake_email(address, salt):
+    digest = hashlib.blake2b(address.lower(), key=salt, digest_size=5).hexdigest()
+    return f"contact-{digest}@example.invalid"
+
+
+def replace_emails(db, tables, plan, allowed_domains):
+    """Remplace les adresses hors domaines autorisés par des adresses fictives.
+
+    Une même adresse donne la même adresse fictive dans tout le dump ; le sel tiré à
+    chaque exécution empêche de remonter à l'adresse d'origine. Restent en place, et
+    sont retournés par colonne : les adresses des valeurs PHP sérialisées, et celles
+    contenues dans une adresse laissée intacte (ex. a@client.co dans a@client.com).
+    """
+    salt = secrets.token_bytes(16)
+    replaced, left = [], {}
+    for table, column in scanned_columns(tables, plan):
+        occurrences, protected, skipped = {}, set(), 0
+        for value in column_values(db, table, column):
+            foreign, kept = split_emails(value, allowed_domains)
+            if SERIALIZED.search(value):
+                skipped += len(foreign)
+                continue
+            protected.update(kept)
+            for address in foreign:
+                occurrences[address] = occurrences.get(address, 0) + 1
+
+        # REPLACE agit sur des sous-chaînes : les plus longues d'abord, et jamais
+        # une adresse contenue dans une autre qui reste en place.
+        targets = []
+        for address in sorted(occurrences, key=len, reverse=True):
+            if any(address in other for other in protected):
+                skipped += occurrences[address]
+                protected.add(address)
+            else:
+                targets.append(address)
+
+        for start in range(0, len(targets), 50):
+            expr = f"`{column}`"
+            for address in targets[start:start + 50]:
+                expr = f"REPLACE({expr}, {sql_string(address.decode())}, {sql_string(fake_email(address, salt))})"
+            db.execute(f"UPDATE `{table}` SET `{column}` = {expr} WHERE `{column}` LIKE '%@%' "
+                       f"AND NOT REGEXP_LIKE(`{column}`, {SERIALIZED_SQL}, 'c');",
+                       f"Remplacement des courriels de {table}.{column}")
+        if targets:
+            replaced.append((table, column, sum(occurrences[a] for a in targets)))
+        if skipped:
+            left[(table, column)] = skipped
+    return replaced, left
 
 
 def write_summary(lines):
@@ -412,15 +479,29 @@ def run(args):
         kept = sum(1 for _, rule, _ in plan if rule == "keep")
         log(f"  keep      {kept} tables conservées telles quelles")
 
-        if settings["email_scan"] != "off":
+        mode = settings["email_scan"]
+        expected = {}
+        if mode == "replace":
+            replaced, expected = replace_emails(db, tables, plan, settings["allowed_email_domains"])
+            log(f"\n{sum(n for _, _, n in replaced)} courriels remplacés par des adresses fictives")
+            for table, column, count in replaced:
+                log(f"  {table}.{column} : {count}")
+        if mode != "off":
             findings = scan_emails(db, tables, plan, settings["allowed_email_domains"])
+            # Contrôle : il ne reste que les adresses volontairement laissées en place.
+            if mode == "replace" and {(t, c): n for t, c, n in findings} != expected:
+                raise AnonymizeError("Contrôle du remplacement des courriels échoué")
             if findings:
-                log("\nCourriels hors domaines autorisés (valeurs non affichées) :")
+                if mode == "replace":
+                    title = "Courriels laissés en place (valeurs PHP sérialisées ou adresses imbriquées)"
+                else:
+                    title = "Courriels hors domaines autorisés"
+                log(f"\n{title}, valeurs non affichées :")
                 for table, column, count in findings:
                     log(f"  {table}.{column} : {count}")
-                write_summary(["### Anonymisation : courriels détectés",
+                write_summary([f"### Anonymisation : {title[0].lower()}{title[1:]}",
                                *[f"- `{t}.{c}` : {n}" for t, c, n in findings]])
-                if settings["email_scan"] == "block":
+                if mode == "block":
                     raise AnonymizeError("Anonymisation interrompue : courriels détectés", exit_code=3)
             else:
                 log("\nAucun courriel hors domaines autorisés")

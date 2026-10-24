@@ -49,7 +49,7 @@ docs/plan-anonymisation.md
 4. Refuse de continuer si le dump a créé une autre base (`USE`/`CREATE DATABASE`) ou si la base est vide.
 5. Classe chaque table ; arrêt avec le **code 2** si des tables n'ont pas de règle.
 6. Applique `truncate` et `update`, puis contrôle le résultat (table vide, colonne égale à la valeur attendue).
-7. Scanne les courriels dans les colonnes texte conservées : il compte les adresses hors domaines autorisés, sans jamais les afficher. Avec `block`, arrêt avec le **code 3**.
+7. Scanne les courriels dans les colonnes texte conservées : il compte les adresses hors domaines autorisés, sans jamais les afficher. Avec `block`, arrêt avec le **code 3**. Avec `replace`, il les remplace d'abord par des adresses fictives (voir plus bas), puis contrôle qu'il ne reste que celles laissées volontairement en place.
 8. Exporte avec `mysqldump` vers un fichier `.partial`, renommé seulement en cas de succès.
 9. Supprime le conteneur dans tous les cas (sauf `--keep-container`).
 
@@ -59,7 +59,7 @@ Options locales : `--keep-container`, `--verbose-errors` (affiche les erreurs My
 
 ```yaml
 settings:
-  email_scan: warn            # warn | block | off
+  email_scan: warn            # warn | block | replace | off
   allowed_email_domains:      # cumulés : défaut + core + projet
     - client.example
   key_column: uid             # clé des stratégies email, username… (défaut uid)
@@ -86,6 +86,17 @@ Stratégies : `email`, `username`, `first_name`, `last_name`, `full_name` (exige
 Les tables absentes du dump et les colonnes absentes d'une table sont ignorées.
 
 `empty` ne gère pas encore les colonnes `ENUM` sans valeur vide ni `JSON` : utiliser `null` ou `{fixed: ...}`.
+
+### Remplacement des courriels du contenu (`email_scan: replace`)
+
+- Colonnes visées : les mêmes que le scan (colonnes texte des tables `keep` et colonnes non remplacées des tables `update`).
+- Chaque adresse hors domaines autorisés devient `contact-<hachage>@example.invalid`. Une même adresse (sans égard à la casse) donne la même adresse fictive dans tout le dump, donc `mailto:` et texte affiché restent cohérents. Le hachage utilise un sel tiré à chaque exécution : impossible de remonter à l'adresse d'origine, et les adresses fictives changent d'une exécution à l'autre.
+- Le reste du texte n'est pas modifié (`REPLACE` en SQL, sans clé primaire nécessaire, tout jeu de caractères).
+- Laissées en place et signalées : les adresses dans une valeur PHP sérialisée (`s:17:"…"` : changer la longueur la casserait) et celles contenues dans une adresse conservée (ex. `a@client.co` dans `a@client.com`).
+- Contrôle : après remplacement, le scan doit trouver exactement les adresses laissées en place, sinon l'anonymisation échoue.
+- Les valeurs sont lues en hexadécimal : le mode batch de `mysql` échappe les retours de ligne, ce qui faussait aussi le comptage du scan pour une adresse en début de ligne (corrigé).
+
+Testé sur un dump fictif : HTML avec `mailto:`, variantes de casse, adresse après un retour de ligne, table `latin1` accentuée, table sans clé primaire, domaines autorisés, `logo@2x.png`, valeur sérialisée, adresse imbriquée ; réimport du résultat OK.
 
 ### Utilisation hors TYPO3
 
