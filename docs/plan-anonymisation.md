@@ -139,7 +139,7 @@ Pièges :
 
 1. **Référence de l'action (réglé).** Sans `tools-ref`, le workflow de la branche irait chercher l'action dans `v1`, où elle n'existe pas encore. Pendant le pilote, passer `tools-ref: feat/anonymize-database`.
 2. **`TM_ANONYMIZE` doit être une variable de dépôt (ou d'organisation), pas d'environnement.** Le `if:` d'un job est évalué avant que l'environnement ne soit chargé.
-3. **IAM** : vérifier que le rôle TMDT peut écrire `<projet>/latest_anonymized.sql`. C'est OK si la politique autorise `<projet>/*`, à élargir si elle cible exactement `latest.sql`.
+3. **IAM (vérifié)** : le rôle TMDT peut écrire `<projet>/latest_anonymized.sql`.
 4. **Version MySQL** : un dump produit par `mysqldump` 8.0 depuis un serveur 8.4 s'importe bien en `mysql:8.0`. L'entrée `mysql-image` permet de changer de version au besoin.
 
 ## Étape 3 : pilote sur un projet client
