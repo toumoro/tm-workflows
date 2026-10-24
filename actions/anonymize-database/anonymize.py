@@ -1,8 +1,8 @@
 #!/usr/bin/env python3
-"""Anonymise un dump MySQL TYPO3 dans une base jetable.
+"""Anonymise un dump MySQL dans une base jetable.
 
 Le dump est importé dans un conteneur MySQL créé pour l'occasion, les règles
-(core + projet) y sont appliquées, le résultat est contrôlé puis exporté.
+(communes + projet) y sont appliquées, le résultat est contrôlé puis exporté.
 
 Aucune valeur issue du dump n'est écrite dans les logs : seulement des noms de
 tables, de colonnes et des nombres. Les logs GitHub Actions sont lisibles par
@@ -22,7 +22,7 @@ import time
 
 import yaml
 
-DB_NAME = "typo3_anonymize"
+DB_NAME = "anonymize"
 SYSTEM_DATABASES = {"information_schema", "mysql", "performance_schema", "sys", DB_NAME}
 
 IDENTIFIER = re.compile(r"^[A-Za-z0-9_]+$")
@@ -32,22 +32,32 @@ FILE_EXTENSIONS = {"png", "jpg", "jpeg", "gif", "svg", "webp", "avif"}  # ex. lo
 
 TEXT_TYPES = {"char", "varchar", "tinytext", "text", "mediumtext", "longtext"}
 NUMERIC_TYPES = {"tinyint", "smallint", "mediumint", "int", "bigint", "decimal", "float", "double", "bit"}
+# « empty » d'une colonne date NOT NULL ; NULL si la colonne l'accepte.
+EMPTY_DATES = {
+    "date": "'2000-01-01'",
+    "datetime": "'2000-01-01 00:00:00'",
+    "timestamp": "'2000-01-01 00:00:00'",
+    "time": "'00:00:00'",
+    "year": "2000",
+}
 
-# Stratégies basées sur l'uid : valeurs fictives, stables d'une exécution à l'autre.
-UID_STRATEGIES = {
-    "email": "CONCAT('user', uid, '@example.invalid')",
-    "username": "CONCAT('user', uid)",
-    "first_name": "CONCAT('Prenom', uid)",
-    "last_name": "CONCAT('Nom', uid)",
-    "full_name": "CONCAT('Prenom', uid, ' Nom', uid)",
+# Stratégies basées sur la clé de la table (uid pour TYPO3) : valeurs fictives,
+# stables d'une exécution à l'autre.
+KEY_STRATEGIES = {
+    "email": "CONCAT('user', {key}, '@example.invalid')",
+    "username": "CONCAT('user', {key})",
+    "first_name": "CONCAT('Prenom', {key})",
+    "last_name": "CONCAT('Nom', {key})",
+    "full_name": "CONCAT('Prenom', {key}, ' Nom', {key})",
 }
 STATIC_STRATEGIES = {
     "null": "NULL",
-    "invalid_password": "'!anonymized'",  # aucun algorithme de hash TYPO3 ne le reconnaît
+    "invalid_password": "'!anonymized'",  # ne correspond à aucun format de hash connu
 }
 
 DEFAULT_SETTINGS = {
     "email_scan": "warn",  # warn | block | off
+    "key_column": "uid",   # colonne des stratégies basées sur la clé
     "allowed_email_domains": ["example.invalid"],
 }
 
@@ -86,8 +96,11 @@ def load_rules(path, label):
             raise AnonymizeError(f"{label} : nom de table invalide '{table}'")
         if rule in ("keep", "truncate"):
             continue
-        if not isinstance(rule, dict) or set(rule) != {"update"} or not isinstance(rule["update"], dict):
+        if (not isinstance(rule, dict) or "update" not in rule or not set(rule) <= {"update", "key"}
+                or not isinstance(rule["update"], dict)):
             raise AnonymizeError(f"{label} : règle invalide pour '{table}' (keep, truncate ou update)")
+        if "key" in rule and not IDENTIFIER.match(str(rule["key"])):
+            raise AnonymizeError(f"{label} : clé invalide pour '{table}'")
         for column, strategy in rule["update"].items():
             if strategy is None:  # « null » non cité en YAML
                 strategy = rule["update"][column] = "null"
@@ -97,6 +110,8 @@ def load_rules(path, label):
 
     if settings.get("email_scan", "warn") not in ("warn", "block", "off"):
         raise AnonymizeError(f"{label} : settings.email_scan doit valoir warn, block ou off")
+    if "key_column" in settings and not IDENTIFIER.match(str(settings["key_column"])):
+        raise AnonymizeError(f"{label} : settings.key_column invalide")
     return {"tables": tables, "settings": settings}
 
 
@@ -104,7 +119,7 @@ def validate_strategy(strategy, context):
     if isinstance(strategy, dict):
         if len(strategy) == 1 and ("fixed" in strategy or "sql" in strategy):
             return
-    elif strategy in UID_STRATEGIES or strategy in STATIC_STRATEGIES or strategy == "empty":
+    elif strategy in KEY_STRATEGIES or strategy in STATIC_STRATEGIES or strategy == "empty":
         return
     raise AnonymizeError(f"{context} : stratégie inconnue '{strategy}'")
 
@@ -121,7 +136,7 @@ def merge_settings(core, project):
 
 
 def resolve_rule(table, layers):
-    """Les règles du projet l'emportent sur le core ; un nom exact l'emporte sur un motif."""
+    """Les règles du projet l'emportent sur les communes ; un nom exact l'emporte sur un motif."""
     for label, tables in layers:
         if table in tables:
             return tables[table], label
@@ -248,24 +263,31 @@ def read_schema(db):
             "Liste des tables",
         )
     }
-    for table, column, data_type in db.query(
-        "SELECT TABLE_NAME, COLUMN_NAME, DATA_TYPE FROM information_schema.COLUMNS "
+    for table, column, data_type, nullable in db.query(
+        "SELECT TABLE_NAME, COLUMN_NAME, DATA_TYPE, IS_NULLABLE FROM information_schema.COLUMNS "
         f"WHERE TABLE_SCHEMA = '{DB_NAME}' ORDER BY TABLE_NAME, ORDINAL_POSITION",
         "Liste des colonnes",
     ):
         if table in tables:
-            tables[table][column] = data_type.lower()
+            tables[table][column] = (data_type.lower(), nullable == "YES")
     if not tables:
         raise AnonymizeError("Le dump importé ne contient aucune table")
     return tables
 
 
-def strategy_sql(strategy, data_type):
+def strategy_sql(strategy, column, key):
+    data_type, nullable = column
     if isinstance(strategy, dict):
         return strategy["sql"] if "sql" in strategy else sql_string(strategy["fixed"])
     if strategy == "empty":
-        return "0" if data_type in NUMERIC_TYPES else "''"
-    return UID_STRATEGIES.get(strategy) or STATIC_STRATEGIES[strategy]
+        if data_type in NUMERIC_TYPES:
+            return "0"
+        if data_type in EMPTY_DATES:
+            return "NULL" if nullable else EMPTY_DATES[data_type]
+        return "''"
+    if strategy in KEY_STRATEGIES:
+        return KEY_STRATEGIES[strategy].format(key=f"`{key}`")
+    return STATIC_STRATEGIES[strategy]
 
 
 def classify(tables, layers):
@@ -287,16 +309,17 @@ def apply_truncate(db, table):
     log(f"  truncate  {table:<45} {rows} lignes supprimées")
 
 
-def apply_update(db, table, columns, updates):
+def apply_update(db, table, columns, updates, key):
     present = {c: s for c, s in updates.items() if c in columns}
     missing = sorted(set(updates) - set(present))
-    needs_uid = any(not isinstance(s, dict) and s in UID_STRATEGIES for s in present.values())
-    if needs_uid and "uid" not in columns:
-        raise AnonymizeError(f"{table} : les stratégies basées sur l'uid exigent une colonne uid")
+    needs_key = any(not isinstance(s, dict) and s in KEY_STRATEGIES for s in present.values())
+    if needs_key and key not in columns:
+        raise AnonymizeError(f"{table} : les stratégies basées sur la clé exigent une colonne {key} "
+                             "(settings.key_column ou key: dans la règle)")
 
     rows = db.count(table)
     if present and rows:
-        assignments = {c: strategy_sql(s, columns[c]) for c, s in present.items()}
+        assignments = {c: strategy_sql(s, columns[c], key) for c, s in present.items()}
         sql = ", ".join(f"`{c}` = {expr}" for c, expr in assignments.items())
         db.execute(f"UPDATE `{table}` SET {sql};", f"Anonymisation de {table}")
 
@@ -322,7 +345,7 @@ def scan_emails(db, tables, plan, allowed_domains):
         if rule == "truncate":
             continue
         updated = set(rule["update"]) if isinstance(rule, dict) else set()
-        for column, data_type in tables[table].items():
+        for column, (data_type, _) in tables[table].items():
             if data_type not in TEXT_TYPES or column in updated:
                 continue
             rows = db.query(f"SELECT `{column}` FROM `{table}` WHERE `{column}` LIKE '%@%'",
@@ -348,13 +371,18 @@ def write_summary(lines):
 def run(args):
     if not os.path.isfile(args.dump):
         raise AnonymizeError(f"Dump introuvable : {args.dump}")
-    core = load_rules(args.core_rules, "Règles core")
+    if args.core_rules:
+        core = load_rules(args.core_rules, "Règles communes")
+        log(f"Règles communes : {args.core_rules}")
+    else:
+        core = {"tables": {}, "settings": {}}
+        log("Aucune règle commune")
     if args.project_rules and os.path.exists(args.project_rules):
         project = load_rules(args.project_rules, "Règles projet")
         log(f"Règles projet : {args.project_rules}")
     else:
         project = {"tables": {}, "settings": {}}
-        log("Aucune règle projet : seules les règles core s'appliquent")
+        log("Aucune règle projet")
     settings = merge_settings(core["settings"], project["settings"])
     layers = [("projet", project["tables"]), ("core", core["tables"])]
 
@@ -380,7 +408,7 @@ def run(args):
             if rule == "truncate":
                 apply_truncate(db, table)
             elif isinstance(rule, dict):
-                apply_update(db, table, tables[table], rule["update"])
+                apply_update(db, table, tables[table], rule["update"], rule.get("key", settings["key_column"]))
         kept = sum(1 for _, rule, _ in plan if rule == "keep")
         log(f"  keep      {kept} tables conservées telles quelles")
 
@@ -411,7 +439,7 @@ def main():
     parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
     parser.add_argument("--dump", required=True, help="dump source (.sql ou .sql.gz)")
     parser.add_argument("--output", required=True, help="fichier SQL anonymisé à produire")
-    parser.add_argument("--core-rules", required=True)
+    parser.add_argument("--core-rules", default="", help="règles communes (ex. rules/typo3-core.yml)")
     parser.add_argument("--project-rules", default="")
     parser.add_argument("--mysql-image", default="mysql:8.0")
     parser.add_argument("--keep-container", action="store_true", help="débogage local uniquement")

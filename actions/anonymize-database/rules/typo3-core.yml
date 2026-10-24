@@ -9,7 +9,8 @@
 #   truncate  vidée
 #   update    colonnes remplacées (les colonnes absentes sont ignorées)
 #
-# Stratégies : email, username, first_name, last_name, full_name (basées sur l'uid),
+# Stratégies : email, username, first_name, last_name, full_name (basées sur
+# settings.key_column, uid par défaut, ou sur key: dans la règle de la table),
 # empty, null, invalid_password, {fixed: valeur}, {sql: expression}.
 #
 # Les tables absentes du dump sont ignorées : une règle peut couvrir
