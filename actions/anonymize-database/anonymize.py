@@ -61,7 +61,7 @@ STATIC_STRATEGIES = {
 DEFAULT_SETTINGS = {
     "email_scan": "warn",  # warn | block | replace | off
     "key_column": "uid",   # colonne des stratégies basées sur la clé
-    "allowed_email_domains": ["example.invalid"],
+    "allowed_email_domains": ["example.invalid", "toumoro.com"],  # cumulés avec ceux des règles
 }
 
 

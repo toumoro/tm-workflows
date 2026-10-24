@@ -76,7 +76,7 @@ Chaque table du dump doit être classée, sinon l'anonymisation s'arrête. Les r
 ```yaml
 settings:
   email_scan: warn              # warn | block | replace | off
-  allowed_email_domains:        # adresses jamais signalées ni remplacées
+  allowed_email_domains:        # jamais signalées ni remplacées (+ example.invalid, toumoro.com)
     - client.com
   key_column: uid               # clé des stratégies email, username… (défaut uid)
 
