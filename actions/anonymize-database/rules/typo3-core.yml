@@ -57,6 +57,8 @@ tables:
   be_groups: keep
   fe_sessions: truncate
   be_sessions: truncate
+  fe_session_data: truncate       # TYPO3 < 8
+  tx_rsaauth_keys: truncate       # EXT:rsaauth, TYPO3 < 10
 
   # --- Traces et données techniques ----------------------------------------
   sys_log: truncate
@@ -117,6 +119,7 @@ tables:
   sys_action: keep
   sys_action_asgr_mm: keep
   tx_impexp_presets: keep
+  tx_rtehtmlarea_acronym: keep    # EXT:rtehtmlarea, TYPO3 < 8
   tx_linkvalidator_link: keep
   tx_extensionmanager_domain_model_extension: keep
   tx_extensionmanager_domain_model_repository: keep
