@@ -2,7 +2,7 @@ name: Export/Import Database to S3
 
 on:
   schedule:
-    - cron: '0 9 * * 1-5' # Tous les jours a 5h du matin sauf les weekends
+    - cron: '0 9 * * 1-5' # lun-ven, 9h UTC : 5h l'été, 4h l'hiver
   workflow_dispatch:
 
 permissions:

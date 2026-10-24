@@ -1,5 +1,5 @@
 ##
-# This is a shared workflow to be used across the organisation
+# Déploie Docker puis TYPO3 sur le serveur du projet via SSM (playbooks tm-ansible).
 ##
 
 name: Deployment via SSM

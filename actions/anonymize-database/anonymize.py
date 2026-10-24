@@ -1,12 +1,8 @@
 #!/usr/bin/env python3
-"""Anonymise un dump MySQL dans une base jetable.
+"""Anonymise un dump MySQL dans un conteneur jetable, contrôle puis exporte le résultat.
 
-Le dump est importé dans un conteneur MySQL créé pour l'occasion, les règles
-(communes + projet) y sont appliquées, le résultat est contrôlé puis exporté.
-
-Aucune valeur issue du dump n'est écrite dans les logs : seulement des noms de
-tables, de colonnes et des nombres. Les logs GitHub Actions sont lisibles par
-toute personne ayant accès au dépôt.
+Les logs n'affichent aucune valeur du dump (noms de tables, de colonnes et nombres
+seulement) : ils sont lisibles par quiconque accède au dépôt.
 """
 
 import argparse
@@ -28,16 +24,16 @@ SYSTEM_DATABASES = {"information_schema", "mysql", "performance_schema", "sys", 
 
 IDENTIFIER = re.compile(r"^[A-Za-z0-9_]+$")
 TABLE_PATTERN = re.compile(r"^[A-Za-z0-9_*?\[\]]+$")
-# Sur des octets : les courriels sont en ASCII quel que soit le jeu de caractères de la colonne.
+# Sur des octets : un courriel est en ASCII quel que soit le jeu de caractères.
 EMAIL = re.compile(rb"[A-Za-z0-9._%+-]+@([A-Za-z0-9-]+(?:\.[A-Za-z0-9-]+)*\.([A-Za-z]{2,}))")
 FILE_EXTENSIONS = {"png", "jpg", "jpeg", "gif", "svg", "webp", "avif"}  # ex. logo@2x.png
-# Valeur PHP sérialisée : changer la longueur d'une chaîne la rendrait illisible.
+# Valeur PHP sérialisée : modifier la longueur d'une chaîne la casse.
 SERIALIZED = re.compile(rb's:[0-9]+:"')
 SERIALIZED_SQL = "'s:[0-9]+:\"'"
 
 TEXT_TYPES = {"char", "varchar", "tinytext", "text", "mediumtext", "longtext"}
 NUMERIC_TYPES = {"tinyint", "smallint", "mediumint", "int", "bigint", "decimal", "float", "double", "bit"}
-# « empty » d'une colonne date NOT NULL ; NULL si la colonne l'accepte.
+# « empty » sur une date NOT NULL (NULL si la colonne l'accepte).
 EMPTY_DATES = {
     "date": "'2000-01-01'",
     "datetime": "'2000-01-01 00:00:00'",
@@ -46,8 +42,7 @@ EMPTY_DATES = {
     "year": "2000",
 }
 
-# Stratégies basées sur la clé de la table (uid pour TYPO3) : valeurs fictives,
-# stables d'une exécution à l'autre.
+# Valeurs fictives dérivées de la clé de la table (uid pour TYPO3).
 KEY_STRATEGIES = {
     "email": "CONCAT('user', {key}, '@example.invalid')",
     "username": "CONCAT('user', {key})",
@@ -170,7 +165,7 @@ class Database:
         ]
 
     def _error(self, context, stderr):
-        """Les messages MySQL peuvent citer des valeurs (ex. Duplicate entry) : on ne garde que le code."""
+        """Ne garde que le code d'erreur : un message MySQL peut citer une valeur (Duplicate entry)."""
         text = stderr.decode("utf-8", "replace") if isinstance(stderr, bytes) else stderr
         if self.verbose_errors:
             return AnonymizeError(f"{context}\n{text.strip()}")
@@ -189,8 +184,7 @@ class Database:
         if result.returncode != 0:
             raise AnonymizeError(f"Démarrage du conteneur MySQL échoué : "
                                  f"{result.stderr.decode('utf-8', 'replace').strip()}")
-        # Le serveur temporaire du point d'entrée n'écoute pas en TCP :
-        # une connexion sur 127.0.0.1 garantit qu'on parle au serveur final.
+        # Le serveur temporaire de l'entrypoint n'écoute pas en TCP : 127.0.0.1 atteint le serveur final.
         deadline = time.monotonic() + 180
         while time.monotonic() < deadline:
             probe = subprocess.run(self._client("mysql", "-e", "SELECT 1"), capture_output=True)
@@ -257,7 +251,7 @@ class Database:
 def read_schema(db):
     extra = [row[0] for row in db.query("SHOW DATABASES", "Liste des bases") if row[0] not in SYSTEM_DATABASES]
     if extra:
-        # Un dump contenant USE/CREATE DATABASE aurait écrit ailleurs que dans la base contrôlée.
+        # USE ou CREATE DATABASE dans le dump : des données hors de la base traitée.
         raise AnonymizeError(f"Le dump a créé d'autres bases que {DB_NAME} : {', '.join(extra)}")
 
     tables = {
@@ -328,7 +322,7 @@ def apply_update(db, table, columns, updates, key):
         sql = ", ".join(f"`{c}` = {expr}" for c, expr in assignments.items())
         db.execute(f"UPDATE `{table}` SET {sql};", f"Anonymisation de {table}")
 
-        # Contrôle : chaque colonne vaut bien la valeur attendue (sauf expressions sql libres).
+        # Contrôle : chaque colonne a la valeur attendue (sauf {sql: ...}).
         for column, strategy in present.items():
             if isinstance(strategy, dict) and "sql" in strategy:
                 continue
@@ -362,7 +356,7 @@ def scanned_columns(tables, plan):
 
 
 def column_values(db, table, column):
-    """Valeurs contenant @, lues en hexadécimal : le mode batch de mysql échappe retours de ligne et tabulations."""
+    """Valeurs contenant @, en hexadécimal : le mode batch de mysql échappe les sauts de ligne."""
     rows = db.query(f"SELECT HEX(`{column}`) FROM `{table}` WHERE `{column}` LIKE '%@%'",
                     f"Analyse de {table}.{column}")
     return [bytes.fromhex(value) for (value,) in rows]
@@ -386,10 +380,9 @@ def fake_email(address, salt):
 def replace_emails(db, tables, plan, allowed_domains):
     """Remplace les adresses hors domaines autorisés par des adresses fictives.
 
-    Une même adresse donne la même adresse fictive dans tout le dump ; le sel tiré à
-    chaque exécution empêche de remonter à l'adresse d'origine. Restent en place, et
-    sont retournés par colonne : les adresses des valeurs PHP sérialisées, et celles
-    contenues dans une adresse laissée intacte (ex. a@client.co dans a@client.com).
+    Même adresse, même adresse fictive dans tout le dump ; sel aléatoire à chaque exécution.
+    Retourne aussi, par colonne, le nombre d'adresses laissées en place : valeurs PHP
+    sérialisées et adresses contenues dans une adresse conservée (a@client.co dans a@client.com).
     """
     salt = secrets.token_bytes(16)
     replaced, left = [], {}
@@ -404,8 +397,8 @@ def replace_emails(db, tables, plan, allowed_domains):
             for address in foreign:
                 occurrences[address] = occurrences.get(address, 0) + 1
 
-        # REPLACE agit sur des sous-chaînes : les plus longues d'abord, et jamais
-        # une adresse contenue dans une autre qui reste en place.
+        # REPLACE agit sur des sous-chaînes : plus longues d'abord, jamais une adresse
+        # contenue dans une adresse conservée.
         targets = []
         for address in sorted(occurrences, key=len, reverse=True):
             if any(address in other for other in protected):
@@ -488,7 +481,7 @@ def run(args):
                 log(f"  {table}.{column} : {count}")
         if mode != "off":
             findings = scan_emails(db, tables, plan, settings["allowed_email_domains"])
-            # Contrôle : il ne reste que les adresses volontairement laissées en place.
+            # Contrôle : il ne reste que les adresses laissées en place volontairement.
             if mode == "replace" and {(t, c): n for t, c, n in findings} != expected:
                 raise AnonymizeError("Contrôle du remplacement des courriels échoué")
             if findings:
