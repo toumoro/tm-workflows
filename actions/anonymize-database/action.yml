@@ -1,10 +1,10 @@
 ##
-# Anonymise un dump MySQL TYPO3 dans une base jetable et produit un nouveau fichier SQL.
-# Règles : rules/typo3-core.yml, complétées par le fichier du projet.
+# Anonymise un dump MySQL dans une base jetable et produit un nouveau fichier SQL.
+# Règles : un fichier commun de rules/ (typo3-core par défaut), complété par le fichier du projet.
 ##
 
 name: Anonymize database
-description: Anonymise un dump TYPO3 selon les règles core et projet
+description: Anonymise un dump MySQL selon des règles communes et projet
 
 inputs:
   dump:
@@ -18,6 +18,10 @@ inputs:
     description: Règles propres au projet (facultatif)
     required: false
     default: .github/anonymize.yml
+  core-rules:
+    description: Règles communes, nom d'un fichier de rules/ sans .yml (ex. typo3-core), ou none
+    required: false
+    default: typo3-core
   mysql-image:
     description: Image MySQL de la base jetable
     required: false
@@ -42,10 +46,19 @@ runs:
         OUTPUT: ${{ inputs.output }}
         PROJECT_RULES: ${{ inputs.project-rules }}
         MYSQL_IMAGE: ${{ inputs.mysql-image }}
+        CORE_RULES: ${{ inputs.core-rules }}
       run: |
+        core_rules=""
+        if [ "$CORE_RULES" != "none" ]; then
+          core_rules="$GITHUB_ACTION_PATH/rules/$CORE_RULES.yml"
+          if [[ ! "$CORE_RULES" =~ ^[A-Za-z0-9_-]+$ ]] || [ ! -f "$core_rules" ]; then
+            echo "Règles communes inconnues : $CORE_RULES"
+            exit 1
+          fi
+        fi
         python "$GITHUB_ACTION_PATH/anonymize.py" \
           --dump "$DUMP" \
           --output "$OUTPUT" \
-          --core-rules "$GITHUB_ACTION_PATH/rules/typo3-core.yml" \
+          --core-rules "$core_rules" \
           --project-rules "$PROJECT_RULES" \
           --mysql-image "$MYSQL_IMAGE"

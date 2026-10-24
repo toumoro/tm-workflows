@@ -1,7 +1,7 @@
-# Plan : anonymisation des dumps de base de données TYPO3
+# Plan : anonymisation des dumps de base de données (TYPO3 d'abord)
 
 Branche : `feat/anonymize-database` (dépôt `toumoro/tm-workflows`)
-Dernière mise à jour : 2026-10-23
+Dernière mise à jour : 2026-10-24
 
 ## Objectif
 
@@ -22,7 +22,8 @@ Produire, à côté du `latest.sql` actuel, un second fichier **`latest_anonymiz
 | Base temporaire | Conteneur MySQL jetable démarré **par le script lui-même** (pas de bloc `services:`) : même code en local et sur GitHub |
 | Code central | **Action composite** dans `actions/anonymize-database/` : un workflow réutilisable ne voit pas ses propres fichiers, une action composite oui (`github.action_path`) |
 | Règles projet | `.github/anonymize.yml` dans le dépôt client ; modèle dans `templates/anonymize.yml` |
-| Priorité des règles | Projet > core ; nom exact > motif (`cache_*`) |
+| Priorité des règles | Projet > communes (core) ; nom exact > motif (`cache_*`) |
+| Autres CMS | Entrée `core-rules: none` (ou un autre fichier de `rules/`), `settings.key_column` ou `key:` par table si la clé n'est pas `uid`. MySQL/MariaDB seulement |
 | Tables sans règle | L'anonymisation échoue et liste les tables à classer (liste blanche stricte) |
 | Logs | Jamais de valeurs : uniquement des noms de tables et colonnes et des nombres. Erreurs MySQL réduites à leur code |
 | Format de sortie | `latest_anonymized.sql`, non compressé, comme `latest.sql` |
@@ -42,13 +43,13 @@ docs/plan-anonymisation.md
 
 ### Fonctionnement de `anonymize.py`
 
-1. Vérifie que le dump existe, charge et valide les règles core et projet.
+1. Vérifie que le dump existe, charge et valide les règles communes (facultatives) et projet.
 2. Démarre un conteneur `mysql:8.0` nommé `tm-anonymize-<pid>-<aléa>` avec un mot de passe aléatoire.
-3. Importe le dump (`.sql` ou `.sql.gz`) dans la base `typo3_anonymize`.
+3. Importe le dump (`.sql` ou `.sql.gz`) dans la base `anonymize`.
 4. Refuse de continuer si le dump a créé une autre base (`USE`/`CREATE DATABASE`) ou si la base est vide.
 5. Classe chaque table ; arrêt avec le **code 2** si des tables n'ont pas de règle.
 6. Applique `truncate` et `update`, puis contrôle le résultat (table vide, colonne égale à la valeur attendue).
-7. Scanne les courriels dans les colonnes texte conservées : il compte les adresses hors domaines autorisés, sans jamais les afficher. Avec `block`, arrêt avec le **code 3**.
+7. Scanne les courriels dans les colonnes texte conservées : il compte les adresses hors domaines autorisés, sans jamais les afficher. Avec `block`, arrêt avec le **code 3**. Avec `replace`, il les remplace d'abord par des adresses fictives (voir plus bas), puis contrôle qu'il ne reste que celles laissées volontairement en place.
 8. Exporte avec `mysqldump` vers un fichier `.partial`, renommé seulement en cas de succès.
 9. Supprime le conteneur dans tous les cas (sauf `--keep-container`).
 
@@ -58,9 +59,10 @@ Options locales : `--keep-container`, `--verbose-errors` (affiche les erreurs My
 
 ```yaml
 settings:
-  email_scan: warn            # warn | block | off
+  email_scan: warn            # warn | block | replace | off
   allowed_email_domains:      # cumulés : défaut + core + projet
     - client.example
+  key_column: uid             # clé des stratégies email, username… (défaut uid)
 
 tables:
   ma_table: keep
@@ -69,15 +71,36 @@ tables:
     update:
       email: email            # user<uid>@example.invalid
       name: full_name         # Prenom<uid> Nom<uid>
-      telephone: empty        # '' (ou 0 pour une colonne numérique)
+      telephone: empty        # '' ; 0 si numérique ; date : NULL si permis, sinon 2000-01-01
       mfa: null
       password: invalid_password   # '!anonymized'
       note: {fixed: "Texte fictif"}
       autre: {sql: "CONCAT('x', uid)"}   # non contrôlée après coup
+  wp_users:
+    key: ID                   # remplace key_column pour cette table
+    update:
+      user_email: email       # user<ID>@example.invalid
 ```
 
-Stratégies : `email`, `username`, `first_name`, `last_name`, `full_name` (exigent une colonne `uid`), `empty`, `null`, `invalid_password`, `{fixed: ...}`, `{sql: ...}`.
+Stratégies : `email`, `username`, `first_name`, `last_name`, `full_name` (exigent la colonne clé : `key:` de la table, sinon `settings.key_column`, sinon `uid`), `empty`, `null`, `invalid_password`, `{fixed: ...}`, `{sql: ...}`.
 Les tables absentes du dump et les colonnes absentes d'une table sont ignorées.
+
+`empty` ne gère pas encore les colonnes `ENUM` sans valeur vide ni `JSON` : utiliser `null` ou `{fixed: ...}`.
+
+### Remplacement des courriels du contenu (`email_scan: replace`)
+
+- Colonnes visées : les mêmes que le scan (colonnes texte des tables `keep` et colonnes non remplacées des tables `update`).
+- Chaque adresse hors domaines autorisés devient `contact-<hachage>@example.invalid`. Une même adresse (sans égard à la casse) donne la même adresse fictive dans tout le dump, donc `mailto:` et texte affiché restent cohérents. Le hachage utilise un sel tiré à chaque exécution : impossible de remonter à l'adresse d'origine, et les adresses fictives changent d'une exécution à l'autre.
+- Le reste du texte n'est pas modifié (`REPLACE` en SQL, sans clé primaire nécessaire, tout jeu de caractères).
+- Laissées en place et signalées : les adresses dans une valeur PHP sérialisée (`s:17:"…"` : changer la longueur la casserait) et celles contenues dans une adresse conservée (ex. `a@client.co` dans `a@client.com`).
+- Contrôle : après remplacement, le scan doit trouver exactement les adresses laissées en place, sinon l'anonymisation échoue.
+- Les valeurs sont lues en hexadécimal : le mode batch de `mysql` échappe les retours de ligne, ce qui faussait aussi le comptage du scan pour une adresse en début de ligne (corrigé).
+
+Testé sur un dump fictif : HTML avec `mailto:`, variantes de casse, adresse après un retour de ligne, table `latin1` accentuée, table sans clé primaire, domaines autorisés, `logo@2x.png`, valeur sérialisée, adresse imbriquée ; réimport du résultat OK.
+
+### Utilisation hors TYPO3
+
+L'entrée `core-rules` de l'action choisit le fichier commun de `rules/` (`typo3-core` par défaut) ; `none` n'en charge aucun et toutes les tables sont classées dans le fichier du projet. En local, omettre `--core-rules`. Testé sur un dump fictif de type Laravel/WordPress (clé `id` et `ID`, colonnes `DATE`, `DATETIME`, `TIMESTAMP` nullables ou non).
 
 ### Contenu des règles core (`rules/typo3-core.yml`)
 
