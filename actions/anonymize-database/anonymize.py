@@ -30,8 +30,11 @@ FILE_EXTENSIONS = {"png", "jpg", "jpeg", "gif", "svg", "webp", "avif"}  # ex. lo
 # Valeur PHP sérialisée : modifier la longueur d'une chaîne la casse.
 SERIALIZED = re.compile(rb's:[0-9]+:"')
 SERIALIZED_SQL = "'s:[0-9]+:\"'"
+# Échappement JSON collé à une adresse (\njean@…, \u00e9…) : n'en fait pas partie.
+JSON_ESCAPE = re.compile(rb"\\(?:u[0-9A-Fa-f]{4}|[nrtbf])")
 
 TEXT_TYPES = {"char", "varchar", "tinytext", "text", "mediumtext", "longtext"}
+BLOB_TYPES = {"tinyblob", "blob", "mediumblob", "longblob"}  # ex. l10n_diffsource (JSON)
 NUMERIC_TYPES = {"tinyint", "smallint", "mediumint", "int", "bigint", "decimal", "float", "double", "bit"}
 # « empty » sur une date NOT NULL (NULL si la colonne l'accepte).
 EMPTY_DATES = {
@@ -338,21 +341,27 @@ def split_emails(value, allowed_domains):
     """Sépare les courriels d'une valeur : (hors domaines autorisés, laissés intacts)."""
     foreign, kept = [], []
     for match in EMAIL.finditer(value):
+        address, start = match.group(0), match.start()
+        escape = JSON_ESCAPE.match(value, start - 1) if start else None
+        if escape:
+            address = address[escape.end() - start:]
+            if address.startswith(b"@"):
+                continue
         domain, tld = match.group(1).decode().lower(), match.group(2).decode().lower()
         allowed = any(domain == d or domain.endswith("." + d) for d in allowed_domains)
-        (kept if tld in FILE_EXTENSIONS or allowed else foreign).append(match.group(0))
+        (kept if tld in FILE_EXTENSIONS or allowed else foreign).append(address)
     return foreign, kept
 
 
 def scanned_columns(tables, plan):
-    """Colonnes texte non remplacées des tables conservées."""
+    """Colonnes texte et binaires non remplacées des tables conservées."""
     for table, rule, _ in plan:
         if rule == "truncate":
             continue
         updated = set(rule["update"]) if isinstance(rule, dict) else set()
         for column, (data_type, _) in tables[table].items():
-            if data_type in TEXT_TYPES and column not in updated:
-                yield table, column
+            if data_type in TEXT_TYPES | BLOB_TYPES and column not in updated:
+                yield table, column, data_type
 
 
 def column_values(db, table, column):
@@ -365,7 +374,7 @@ def column_values(db, table, column):
 def scan_emails(db, tables, plan, allowed_domains):
     """Compte les adresses hors domaines autorisés, sans jamais les afficher."""
     findings = []
-    for table, column in scanned_columns(tables, plan):
+    for table, column, _ in scanned_columns(tables, plan):
         count = sum(len(split_emails(value, allowed_domains)[0]) for value in column_values(db, table, column))
         if count:
             findings.append((table, column, count))
@@ -386,7 +395,7 @@ def replace_emails(db, tables, plan, allowed_domains):
     """
     salt = secrets.token_bytes(16)
     replaced, left = [], {}
-    for table, column in scanned_columns(tables, plan):
+    for table, column, data_type in scanned_columns(tables, plan):
         occurrences, protected, skipped = {}, set(), 0
         for value in column_values(db, table, column):
             foreign, kept = split_emails(value, allowed_domains)
@@ -407,12 +416,14 @@ def replace_emails(db, tables, plan, allowed_domains):
             else:
                 targets.append(address)
 
+        # REGEXP_LIKE refuse le jeu de caractères binary.
+        text = f"CONVERT(`{column}` USING utf8mb4)" if data_type in BLOB_TYPES else f"`{column}`"
         for start in range(0, len(targets), 50):
             expr = f"`{column}`"
             for address in targets[start:start + 50]:
                 expr = f"REPLACE({expr}, {sql_string(address.decode())}, {sql_string(fake_email(address, salt))})"
             db.execute(f"UPDATE `{table}` SET `{column}` = {expr} WHERE `{column}` LIKE '%@%' "
-                       f"AND NOT REGEXP_LIKE(`{column}`, {SERIALIZED_SQL}, 'c');",
+                       f"AND NOT REGEXP_LIKE({text}, {SERIALIZED_SQL}, 'c');",
                        f"Remplacement des courriels de {table}.{column}")
         if targets:
             replaced.append((table, column, sum(occurrences[a] for a in targets)))

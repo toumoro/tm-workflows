@@ -109,7 +109,7 @@ tables:
 
 ### Courriels du contenu : `email_scan`
 
-Porte sur les colonnes texte conservées (tables `keep`, colonnes non remplacées des tables `update`).
+Porte sur les colonnes texte et binaires conservées (tables `keep`, colonnes non remplacées des tables `update`), dont `l10n_diffsource`, la copie JSON du contenu source des traductions.
 
 | Valeur | Effet |
 |---|---|
