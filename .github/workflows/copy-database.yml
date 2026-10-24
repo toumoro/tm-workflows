@@ -1,5 +1,6 @@
 ##
-# This is a shared workflow to be used across the organisation
+# Exporte la base de prod vers S3 (latest.sql) et, si TM_ANONYMIZE=true,
+# sa version anonymisée (latest_anonymized.sql). Voir README.md.
 ##
 
 name: Copy Database
@@ -60,7 +61,6 @@ jobs:
         -e state=running \
         /ansible/playbooks/aws/manage-instance.yml
 
-    # Export the database from the source environment
     - name: Export DB
       run: |
         ansible-playbook -i /ansible/inventory/ssm.ini \
@@ -115,8 +115,7 @@ jobs:
           gzip -d latest.sql.gz
           aws s3 cp latest.sql s3://${{ env.BUCKET_NAME }}/${{ env.S3_KEY }}
 
-  # Produit latest_anonymized.sql à côté de latest.sql, si le projet l'active.
-  # Un échec ici ne fait pas échouer le workflow ni l'envoi de latest.sql.
+  # Un échec n'affecte ni le run ni l'envoi de latest.sql.
   Anonymize:
     if: ${{ vars.TM_ANONYMIZE == 'true' }} # variable de dépôt, pas d'environnement
     needs: Export

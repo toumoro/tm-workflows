@@ -1,17 +1,14 @@
 ##
-# Exemple de règles propres à un projet, à copier dans .github/anonymize.yml
-# du dépôt client. Ces règles l'emportent sur les règles communes de l'action
-# (entrée core-rules : typo3-core par défaut, ou none pour un projet non TYPO3).
-#
-# Lancer une première fois sans ce fichier : le rapport liste les tables
-# du projet qui n'ont pas encore de règle.
+# Règles du projet, à copier dans .github/anonymize.yml. Elles l'emportent sur
+# les règles communes (typo3-core). Format : README.md de tm-workflows.
+# Sans ce fichier, le job liste les tables à classer.
 ##
 
 settings:
-  email_scan: warn          # warn | block | off, ou replace : adresses du contenu remplacées par des fictives
-  allowed_email_domains:    # adresses publiques assumées dans le contenu
+  email_scan: warn          # warn | block | replace | off
+  allowed_email_domains:    # adresses conservées (ex. domaine du client)
     - client.example
-  # key_column: id          # colonne des stratégies email, username… (défaut uid)
+  # key_column: id          # clé des stratégies email, username… (défaut uid)
 
 tables:
   tx_monextension_domain_model_comment: truncate
@@ -22,12 +19,12 @@ tables:
       name: full_name
       phone: empty
       notes: {fixed: "Note fictive"}
-  # wp_users:               # clé propre à une table, si elle diffère de key_column
+  # wp_users:               # clé propre à une table
   #   key: ID
   #   update:
   #     user_email: email
 
-  # Extensions tierces fréquentes (absentes des règles core) :
+  # Extensions tierces fréquentes :
   # tx_solr_statistics: truncate          # IP, feuser_id, mots-clés
   # tx_solr_last_searches: truncate
   # "tx_solr_*": keep

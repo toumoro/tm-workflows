@@ -1,6 +1,6 @@
 ##
-# Anonymise un dump MySQL dans une base jetable et produit un nouveau fichier SQL.
-# Règles : un fichier commun de rules/ (typo3-core par défaut), complété par le fichier du projet.
+# Anonymise un dump MySQL selon des règles communes (rules/) et celles du projet.
+# Format des règles : README.md.
 ##
 
 name: Anonymize database

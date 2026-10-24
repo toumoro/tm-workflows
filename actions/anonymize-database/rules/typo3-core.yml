@@ -1,20 +1,7 @@
 ##
-# Règles d'anonymisation communes à tous les projets TYPO3.
-# Uniquement les tables du core TYPO3 (extensions système) : les extensions
-# tierces ou maison sont classées dans le fichier de chaque projet.
-#
-# Chaque table du dump doit être classée, ici ou dans le fichier du projet
-# (.github/anonymize.yml), qui l'emporte sur ce fichier :
-#   keep      conservée telle quelle
-#   truncate  vidée
-#   update    colonnes remplacées (les colonnes absentes sont ignorées)
-#
-# Stratégies : email, username, first_name, last_name, full_name (basées sur
-# settings.key_column, uid par défaut, ou sur key: dans la règle de la table),
-# empty, null, invalid_password, {fixed: valeur}, {sql: expression}.
-#
-# Les tables absentes du dump sont ignorées : une règle peut couvrir
-# plusieurs versions de TYPO3 ou des extensions non installées.
+# Règles communes TYPO3 : tables du core seulement. Extensions tierces et maison :
+# .github/anonymize.yml du projet, qui l'emporte sur ce fichier. Format : README.md.
+# Tables absentes du dump ignorées : couvre plusieurs versions de TYPO3.
 ##
 
 settings:
