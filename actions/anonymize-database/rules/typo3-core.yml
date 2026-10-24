@@ -1,5 +1,7 @@
 ##
 # Règles d'anonymisation communes à tous les projets TYPO3.
+# Uniquement les tables du core TYPO3 (extensions système) : les extensions
+# tierces ou maison sont classées dans le fichier de chaque projet.
 #
 # Chaque table du dump doit être classée, ici ou dans le fichier du projet
 # (.github/anonymize.yml), qui l'emporte sur ce fichier :
@@ -64,7 +66,7 @@ tables:
   sys_preview: truncate
   sys_messenger_messages: truncate
   sys_note: truncate
-  sys_refindex: truncate   # ref_string peut contenir des courriels ; à reconstruire après import
+  sys_refindex: keep       # index calculé : liens entre enregistrements, pas leurs valeurs
   "cache_*": truncate
   "cf_*": truncate
   "index_*": truncate      # indexed_search
@@ -122,19 +124,3 @@ tables:
     update:
       tx_reports_notification_email: empty
   tx_scheduler_task_group: keep
-
-  # --- Extensions courantes ---------------------------------------------------
-  tx_solr_statistics: truncate     # IP, feuser_id, mots-clés
-  tx_solr_last_searches: truncate
-  tx_solr_eventqueue_item: keep
-  tx_solr_indexqueue_item: keep
-  tx_solr_indexqueue_indexing_property: keep
-  tx_powermail_domain_model_mail: truncate
-  tx_powermail_domain_model_answer: truncate
-
-  # --- Extensions Toumoro -----------------------------------------------------
-  toumoro_accordionlist_accordions: keep
-  toumoro_buttonlist_buttons: keep
-  toumoro_navigationlist_navigations: keep
-  toumoro_taglist_tags: keep
-  toumoro_tilelist_tiles: keep

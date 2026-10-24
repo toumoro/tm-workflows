@@ -20,3 +20,10 @@ tables:
       name: full_name
       phone: empty
       notes: {fixed: "Note fictive"}
+
+  # Extensions tierces fréquentes (absentes des règles core) :
+  # tx_solr_statistics: truncate          # IP, feuser_id, mots-clés
+  # tx_solr_last_searches: truncate
+  # "tx_solr_*": keep
+  # tx_powermail_domain_model_mail: truncate
+  # tx_powermail_domain_model_answer: truncate

@@ -27,7 +27,7 @@ Produire, à côté du `latest.sql` actuel, un second fichier **`latest_anonymiz
 | Logs | Jamais de valeurs : uniquement des noms de tables et colonnes et des nombres. Erreurs MySQL réduites à leur code |
 | Format de sortie | `latest_anonymized.sql`, non compressé, comme `latest.sql` |
 
-## Étape 1 : action d'anonymisation (FAITE, non commitée)
+## Étape 1 : action d'anonymisation (FAITE, commit `930a3b6`)
 
 ### Fichiers
 
@@ -82,15 +82,17 @@ Les tables absentes du dump et les colonnes absentes d'une table sont ignorées.
 ### Contenu des règles core (`rules/typo3-core.yml`)
 
 - **update** : `fe_users`, `be_users` (si présente), `sys_file_metadata` (champs EXT:filemetadata), `tx_scheduler_task.tx_reports_notification_email`
-- **truncate** : sessions, `sys_log`, `sys_history`, `sys_http_report`, `sys_lockedrecords`, `sys_preview`, `sys_messenger_messages`, `sys_note`, `sys_refindex`, `cache_*`, `cf_*`, `index_*`, `tx_solr_statistics`, `tx_solr_last_searches`, `tx_powermail_domain_model_mail/answer`
-- **keep** : contenu, structure, fichiers, configuration backend, autres tables Solr, les 5 tables `toumoro_*`
+Uniquement les tables du core TYPO3. Les extensions tierces (Solr, Powermail…) et les extensions maison Toumoro sont classées dans le `.github/anonymize.yml` de chaque projet ; `templates/anonymize.yml` donne des exemples pour Solr et Powermail.
+
+- **truncate** : sessions, `sys_log`, `sys_history`, `sys_http_report`, `sys_lockedrecords`, `sys_preview`, `sys_messenger_messages`, `sys_note`, `cache_*`, `cf_*`, `index_*` (indexed_search)
+- **keep** : contenu, structure, fichiers, configuration backend, `sys_refindex` (index calculé, sans valeurs des enregistrements)
 
 ### Tests réalisés (en local, Docker Desktop / WSL)
 
 | Test | Résultat |
 |---|---|
-| `latest.sql` EPQ sans règles projet | Code 2, 13 tables EPQ listées |
-| `latest.sql` EPQ avec les règles projet ci-dessous | OK en ~45 s : 66 tables, `sys_log` −16 494 lignes, `tx_qccomments` −8 lignes |
+| Dump réel d'un projet, sans règles projet | Code 2, tables spécifiques au projet listées |
+| Même dump avec des règles projet | OK en ~45 s (66 tables) |
 | Dump fictif `.gz` avec 2 `fe_users` | OK, aucune valeur d'origine restante |
 | Réimport du résultat | OK |
 | Erreur MySQL contenant une donnée (Duplicate entry) | Seul le code `ERROR 1062` est affiché, aucun fichier produit |
@@ -101,14 +103,7 @@ Les tables absentes du dump et les colonnes absentes d'une table sont ignorées.
 
 Prérequis : Docker, Python 3, PyYAML (`pip install pyyaml` ou `apt install python3-yaml`). **Ne jamais commiter de dump réel.**
 
-Règles EPQ de test (à mettre plus tard dans `epq-site-web/.github/anonymize.yml`) :
-
-```yaml
-tables:
-  tx_qccomments_domain_model_comment: truncate   # commentaires libres des visiteurs
-  "tx_siteepq_domain_model_*": keep              # taux et produits financiers publics
-  tx_tmqctroussesdg_page_alert: keep
-```
+Règles projet de test : partir de `templates/anonymize.yml` et classer les tables listées par le premier lancement (code 2).
 
 Commande :
 
@@ -117,17 +112,17 @@ python3 actions/anonymize-database/anonymize.py \
   --dump /chemin/latest.sql \
   --output /tmp/latest_anonymized.sql \
   --core-rules actions/anonymize-database/rules/typo3-core.yml \
-  --project-rules /chemin/anonymize.epq.yml
+  --project-rules /chemin/anonymize.yml
 ```
 
-Dump fictif pour tester `fe_users` (le dump EPQ n'en contient aucune ligne) : prendre le `CREATE TABLE fe_users` d'un dump réel, puis insérer des lignes inventées (nom, courriel, téléphone, hash `$argon2i$...`, `mfa`). Vérifier ensuite qu'aucune valeur inventée ne reste dans la sortie (`grep -c`).
+Dump fictif pour tester `fe_users` (si le dump de test n'en contient aucune ligne) : prendre le `CREATE TABLE fe_users` d'un dump réel, puis insérer des lignes inventées (nom, courriel, téléphone, hash `$argon2i$...`, `mfa`). Vérifier ensuite qu'aucune valeur inventée ne reste dans la sortie (`grep -c`).
 
 ## À valider avant le pilote
 
-- [ ] Classement EPQ : `tx_siteepq_*` et `tx_tmqctroussesdg_page_alert` en `keep`. Classement fait d'après les noms de colonnes, sans examiner les données.
-- [ ] 7 courriels détectés dans le contenu conservé (5 dans `tt_content.bodytext`, 2 dans `toumoro_buttonlist_buttons.link`). S'ils sont publics, ajouter leurs domaines à `allowed_email_domains` du projet. Pour les voir : en local seulement, avec `--keep-container` et une requête SQL directe.
-- [ ] Mots de passe remplacés par `!anonymized` : plus aucune connexion possible avec les comptes existants.
-- [ ] `sys_refindex` vidée : lancer `referenceindex:update` après l'import.
+- [ ] Classement des tables du projet pilote (dans son `.github/anonymize.yml`, pas dans ce dépôt).
+- [x] Courriels dans le contenu conservé : acceptés, ce n'est pas de l'information confidentielle. Le scan reste en `warn`.
+- [x] Mots de passe remplacés par `!anonymized` : accepté (plus aucune connexion possible avec les comptes existants).
+- [x] `sys_refindex` : conservée (`keep`), pas de reconstruction nécessaire après l'import.
 - [ ] `sys_webhook` / `sys_reaction` conservées (secrets techniques, pas des données personnelles).
 
 ## Étape 2 : brancher le job `Anonymize` dans `copy-database.yml`
@@ -181,9 +176,9 @@ Pièges :
 1. **Référence de l'action.** Pendant le test, le workflow sur la branche appellerait l'action `@v1`, où elle n'existe pas encore. Pendant le pilote, utiliser `@feat/anonymize-database`, puis revenir à `@v1` avant la release. Option : une entrée `tools-ref` dont la valeur par défaut est `v1`.
 2. **`TM_ANONYMIZE` doit être une variable de dépôt (ou d'organisation), pas d'environnement.** Le `if:` d'un job est évalué avant que l'environnement ne soit chargé.
 3. **IAM** : vérifier que le rôle TMDT peut écrire `<projet>/latest_anonymized.sql`. C'est OK si la politique autorise `<projet>/*`, à élargir si elle cible exactement `latest.sql`.
-4. **Version MySQL** : le serveur EPQ est en 8.4, le dump est produit par `mysqldump` 8.0 et l'import en `mysql:8.0` a fonctionné. L'entrée `mysql-image` permet de changer de version au besoin.
+4. **Version MySQL** : un dump produit par `mysqldump` 8.0 depuis un serveur 8.4 s'importe bien en `mysql:8.0`. L'entrée `mysql-image` permet de changer de version au besoin.
 
-## Étape 3 : pilote sur EPQ (`epq-site-web`)
+## Étape 3 : pilote sur un projet client
 
 1. Ajouter `.github/anonymize.yml` avec les règles validées.
 2. Ajouter la variable de dépôt `TM_ANONYMIZE=true`.
