@@ -142,7 +142,9 @@ Pièges :
 3. **IAM (vérifié)** : le rôle TMDT peut écrire `<projet>/latest_anonymized.sql`.
 4. **Version MySQL** : un dump produit par `mysqldump` 8.0 depuis un serveur 8.4 s'importe bien en `mysql:8.0`. L'entrée `mysql-image` permet de changer de version au besoin.
 
-## Étape 3 : pilote sur un projet client
+## Étape 3 : pilote sur un projet client (FAIT, sauf le point 6)
+
+Run nominal et test d'échec réussis : en cas d'échec de `Anonymize`, le run reste vert et `latest.sql` est envoyé. Le `latest_anonymized.sql` du run précédent reste alors dans S3, sans mise à jour.
 
 1. Ajouter `.github/anonymize.yml` avec les règles validées.
 2. Ajouter la variable de dépôt `TM_ANONYMIZE=true`.
