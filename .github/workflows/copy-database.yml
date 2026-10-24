@@ -10,6 +10,11 @@ on:
       environment:
         required: true
         type: string
+      tools-ref:
+        description: Référence de tm-workflows pour l'action d'anonymisation (branche pendant un pilote)
+        required: false
+        type: string
+        default: v1
     secrets:
       aws-oidc-role-arn:
         required: true
@@ -109,3 +114,53 @@ jobs:
         run: |
           gzip -d latest.sql.gz
           aws s3 cp latest.sql s3://${{ env.BUCKET_NAME }}/${{ env.S3_KEY }}
+
+  # Produit latest_anonymized.sql à côté de latest.sql, si le projet l'active.
+  # Un échec ici ne fait pas échouer le workflow ni l'envoi de latest.sql.
+  Anonymize:
+    if: ${{ vars.TM_ANONYMIZE == 'true' }} # variable de dépôt, pas d'environnement
+    needs: Export
+    continue-on-error: true
+    runs-on: ubuntu-latest
+    environment: ${{ inputs.environment }}
+    permissions:
+      id-token: write
+      contents: read
+    env:
+      AWS_REGION: ${{ vars.AWS_REGION || 'ca-central-1' }}
+      BUCKET_NAME: ${{ vars.TM_TMDT_BUCKET_NAME }}
+      S3_KEY: ${{ vars.TM_TMDT_PROJECT_NAME }}/latest_anonymized.sql
+
+    steps:
+      - name: Checkout client repo
+        uses: actions/checkout@v4
+
+      - name: Checkout tm-workflows
+        uses: actions/checkout@v4
+        with:
+          repository: toumoro/tm-workflows
+          ref: ${{ inputs.tools-ref }}
+          path: .tm-workflows
+
+      - name: Download artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: db-dump
+          path: dump
+
+      - name: Anonymize
+        uses: ./.tm-workflows/actions/anonymize-database
+        with:
+          dump: dump/latest.sql.gz
+          output: latest_anonymized.sql
+
+      - name: Setup AWS CLI
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          aws-region: ${{ env.AWS_REGION }}
+          role-to-assume: ${{ secrets.tm-tmdt-aws-oidc-role-arn }}
+          role-duration-seconds: 1200
+          special-characters-workaround: true
+
+      - name: Upload to S3
+        run: aws s3 cp latest_anonymized.sql "s3://${BUCKET_NAME}/${S3_KEY}"

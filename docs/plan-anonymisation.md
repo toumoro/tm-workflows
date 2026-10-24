@@ -125,55 +125,19 @@ Dump fictif pour tester `fe_users` (si le dump de test n'en contient aucune lign
 - [x] `sys_refindex` : conservée (`keep`), pas de reconstruction nécessaire après l'import.
 - [ ] `sys_webhook` / `sys_reaction` conservées (secrets techniques, pas des données personnelles).
 
-## Étape 2 : brancher le job `Anonymize` dans `copy-database.yml`
+## Étape 2 : brancher le job `Anonymize` dans `copy-database.yml` (FAITE, non testée sur GitHub)
 
-Ajouter ce job **sans toucher** aux jobs `Export` et `Upload` :
+Job `Anonymize` ajouté **sans toucher** aux jobs `Export` et `Upload` :
 
-```yaml
-  Anonymize:
-    if: ${{ vars.TM_ANONYMIZE == 'true' }}
-    needs: Export
-    continue-on-error: true
-    runs-on: ubuntu-latest
-    environment: ${{ inputs.environment }}
-    permissions:
-      id-token: write
-      contents: read
-    env:
-      AWS_REGION: ${{ vars.AWS_REGION || 'ca-central-1' }}
-      BUCKET_NAME: ${{ vars.TM_TMDT_BUCKET_NAME }}
-      S3_KEY: ${{ vars.TM_TMDT_PROJECT_NAME }}/latest_anonymized.sql
-    steps:
-      - name: Checkout client repo        # amène .github/anonymize.yml
-        uses: actions/checkout@v4
+- `if: vars.TM_ANONYMIZE == 'true'`, `needs: Export`, `continue-on-error: true`.
+- Récupère le dépôt client (pour `.github/anonymize.yml`), puis `toumoro/tm-workflows` à la référence `tools-ref` dans `.tm-workflows/`, et appelle l'action locale `./.tm-workflows/actions/anonymize-database`.
+- Télécharge l'artifact `db-dump`, anonymise `dump/latest.sql.gz`, envoie `latest_anonymized.sql` dans `<projet>/latest_anonymized.sql` avec le rôle TMDT.
 
-      - name: Download artifact
-        uses: actions/download-artifact@v4
-        with:
-          name: db-dump
-          path: dump
-
-      - name: Anonymize
-        uses: toumoro/tm-workflows/actions/anonymize-database@v1   # voir piège 1
-        with:
-          dump: dump/latest.sql.gz
-          output: latest_anonymized.sql
-
-      - name: Setup AWS CLI
-        uses: aws-actions/configure-aws-credentials@v4
-        with:
-          aws-region: ${{ env.AWS_REGION }}
-          role-to-assume: ${{ secrets.tm-tmdt-aws-oidc-role-arn }}
-          role-duration-seconds: 1200
-          special-characters-workaround: true
-
-      - name: Upload to S3
-        run: aws s3 cp latest_anonymized.sql "s3://${BUCKET_NAME}/${S3_KEY}"
-```
+Nouvelle entrée du workflow : `tools-ref` (défaut `v1`). `uses:` n'accepte pas d'expression, d'où le `checkout` du dépôt (public) à cette référence.
 
 Pièges :
 
-1. **Référence de l'action.** Pendant le test, le workflow sur la branche appellerait l'action `@v1`, où elle n'existe pas encore. Pendant le pilote, utiliser `@feat/anonymize-database`, puis revenir à `@v1` avant la release. Option : une entrée `tools-ref` dont la valeur par défaut est `v1`.
+1. **Référence de l'action (réglé).** Sans `tools-ref`, le workflow de la branche irait chercher l'action dans `v1`, où elle n'existe pas encore. Pendant le pilote, passer `tools-ref: feat/anonymize-database`.
 2. **`TM_ANONYMIZE` doit être une variable de dépôt (ou d'organisation), pas d'environnement.** Le `if:` d'un job est évalué avant que l'environnement ne soit chargé.
 3. **IAM** : vérifier que le rôle TMDT peut écrire `<projet>/latest_anonymized.sql`. C'est OK si la politique autorise `<projet>/*`, à élargir si elle cible exactement `latest.sql`.
 4. **Version MySQL** : un dump produit par `mysqldump` 8.0 depuis un serveur 8.4 s'importe bien en `mysql:8.0`. L'entrée `mysql-image` permet de changer de version au besoin.
@@ -182,10 +146,10 @@ Pièges :
 
 1. Ajouter `.github/anonymize.yml` avec les règles validées.
 2. Ajouter la variable de dépôt `TM_ANONYMIZE=true`.
-3. Pointer temporairement le workflow du projet vers `toumoro/tm-workflows/.github/workflows/copy-database.yml@feat/anonymize-database`.
+3. Pointer temporairement le workflow du projet vers `toumoro/tm-workflows/.github/workflows/copy-database.yml@feat/anonymize-database`, avec `tools-ref: feat/anonymize-database` dans `with:`.
 4. Lancer le workflow (`workflow_dispatch`). Vérifier : `latest.sql` toujours envoyé, job `Anonymize` vert, `latest_anonymized.sql` présent dans S3, résumé du job sans valeurs sensibles.
 5. Tester l'échec : retirer une règle et vérifier que le run reste vert et que `latest.sql` est quand même envoyé.
-6. Remettre `@v1` dans le dépôt du projet.
+6. Après la release, remettre `@v1` et retirer `tools-ref` dans le dépôt du projet.
 
 ## Étape 4 : release
 
@@ -225,5 +189,5 @@ Pièges :
 ```bash
 git fetch origin
 git checkout feat/anonymize-database
-# relire ce fichier, puis : relancer les tests de l'étape 1 → étape 2
+# relire ce fichier, puis : étape 3 (pilote)
 ```
