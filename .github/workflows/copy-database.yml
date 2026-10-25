@@ -155,6 +155,7 @@ jobs:
 
       # Aussi en artifact : récupérable sans AWS (ddev pull github de l'add-on ddev-toumoro, tests des PR)
       - name: Save anonymized artifact
+        continue-on-error: true # un échec ici n'empêche pas l'envoi vers S3
         uses: actions/upload-artifact@v4
         with:
           name: db-dump-anonymized
