@@ -29,7 +29,7 @@ Variables GitHub transmises aux playbooks : `AWS_SSM_BUCKET`, `TM_INSTANCE_ID`, 
 |---|---|
 | `Export` | Démarre le bastion (si `ecs`), exporte la base (`DUMP_TYPE=partial`), arrête le bastion, garde le dump en artifact 24 h |
 | `Upload` | Envoie `latest.sql` dans `s3://<TM_TMDT_BUCKET_NAME>/<TM_TMDT_PROJECT_NAME>/` |
-| `Anonymize` | Si `TM_ANONYMIZE=true` : envoie `latest_anonymized.sql` au même endroit. Un échec n'affecte ni le run ni `latest.sql` |
+| `Anonymize` | Si `TM_ANONYMIZE=true` : envoie `latest_anonymized.sql` au même endroit, et le garde en artifact `db-dump-anonymized` 4 jours (récupérable sans AWS). Un échec n'affecte ni le run ni `latest.sql` |
 
 Appel : `templates/database-export.yml` (lun-ven à 9h UTC, et manuel).
 
