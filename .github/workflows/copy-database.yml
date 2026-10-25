@@ -153,6 +153,14 @@ jobs:
           dump: dump/latest.sql.gz
           output: latest_anonymized.sql
 
+      # Aussi en artifact : récupérable sans AWS (ddev pull github de l'add-on ddev-toumoro, tests des PR)
+      - name: Save anonymized artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: db-dump-anonymized
+          path: latest_anonymized.sql
+          retention-days: 4 # export du lundi au vendredi : l'artifact du vendredi doit durer jusqu'au lundi
+
       - name: Setup AWS CLI
         uses: aws-actions/configure-aws-credentials@v4
         with:
