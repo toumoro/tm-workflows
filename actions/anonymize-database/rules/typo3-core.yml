@@ -1,6 +1,7 @@
 ##
-# Règles communes TYPO3 : tables du core seulement. Extensions tierces et maison :
-# .github/anonymize.yml du projet, qui l'emporte sur ce fichier. Format : README.md.
+# Règles communes TYPO3 : core et extensions tierces courantes. Autres extensions,
+# tierces ou maison : .github/anonymize.yml du projet, qui l'emporte sur ce fichier.
+# Format : README.md.
 # Tables absentes du dump ignorées : couvre plusieurs versions de TYPO3.
 ##
 
@@ -115,3 +116,21 @@ tables:
     update:
       tx_reports_notification_email: empty
   tx_scheduler_task_group: keep
+
+  # --- Extensions tierces courantes -----------------------------------------
+  tx_devlog_domain_model_entry: truncate   # EXT:devlog : messages et données arbitraires
+  tx_devlog: truncate                      # EXT:devlog, TYPO3 < 9
+  tx_gridelements_backend_layout: keep     # EXT:gridelements : gabarits, pas de données
+  tx_news_domain_model_news:               # EXT:news
+    update:
+      author: full_name
+      author_email: email
+  "tx_news_*": keep                        # catégories, tags, liens, tables mm
+  tx_powermail_domain_model_mail: truncate      # EXT:powermail : formulaires envoyés (nom, courriel, IP)
+  tx_powermail_domain_model_answer: truncate
+  tx_powermail_domain_model_mails: truncate     # powermail < 5
+  tx_powermail_domain_model_answers: truncate   # powermail < 5
+  "tx_powermail_*": keep                        # formulaires, pages, champs : structure
+  tx_solr_statistics: truncate             # EXT:solr : IP, feuser_id, mots-clés recherchés
+  tx_solr_last_searches: truncate
+  "tx_solr_*": keep                        # file d'indexation et caches techniques
