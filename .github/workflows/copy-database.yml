@@ -44,10 +44,10 @@ jobs:
       ANSIBLE_PYTHON_INTERPRETER: ${{ vars.ANSIBLE_PYTHON_INTERPRETER || 'auto_silent' }}
     steps:
     - name: Checkout client repo
-      uses: actions/checkout@v4
+      uses: actions/checkout@v5
 
     - name: Setup AWS CLI
-      uses: aws-actions/configure-aws-credentials@v4
+      uses: aws-actions/configure-aws-credentials@v6
       with:
         aws-region: ${{ env.AWS_REGION }}
         role-to-assume: ${{ secrets.aws-oidc-role-arn }}
@@ -77,7 +77,7 @@ jobs:
         /ansible/playbooks/aws/manage-instance.yml
 
     - name: Save artifact
-      uses: actions/upload-artifact@v4
+      uses: actions/upload-artifact@v6
       with:
         name: db-dump
         path: /dump/latest.sql.gz
@@ -97,13 +97,13 @@ jobs:
 
     steps:
       - name: Download artifact
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@v7
         with:
           name: db-dump
           path: .
 
       - name: Setup AWS CLI
-        uses: aws-actions/configure-aws-credentials@v4
+        uses: aws-actions/configure-aws-credentials@v6
         with:
             aws-region: ${{ env.AWS_REGION }}
             role-to-assume: ${{ secrets.tm-tmdt-aws-oidc-role-arn }}
@@ -132,17 +132,17 @@ jobs:
 
     steps:
       - name: Checkout client repo
-        uses: actions/checkout@v4
+        uses: actions/checkout@v5
 
       - name: Checkout tm-workflows
-        uses: actions/checkout@v4
+        uses: actions/checkout@v5
         with:
           repository: toumoro/tm-workflows
           ref: ${{ inputs.tools-ref }}
           path: .tm-workflows
 
       - name: Download artifact
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@v7
         with:
           name: db-dump
           path: dump
@@ -156,14 +156,14 @@ jobs:
       # Aussi en artifact : récupérable sans AWS (ddev pull github de l'add-on ddev-toumoro, tests des PR)
       - name: Save anonymized artifact
         continue-on-error: true # un échec ici n'empêche pas l'envoi vers S3
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v6
         with:
           name: db-dump-anonymized
           path: latest_anonymized.sql
           retention-days: 4 # export du lundi au vendredi : l'artifact du vendredi doit durer jusqu'au lundi
 
       - name: Setup AWS CLI
-        uses: aws-actions/configure-aws-credentials@v4
+        uses: aws-actions/configure-aws-credentials@v6
         with:
           aws-region: ${{ env.AWS_REGION }}
           role-to-assume: ${{ secrets.tm-tmdt-aws-oidc-role-arn }}
