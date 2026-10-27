@@ -143,3 +143,7 @@ python3 actions/anonymize-database/anonymize.py \
 ## Versions
 
 semantic-release sur `main` : `feat:` → version mineure, `fix:` → correctif. Les tags flottants `v1` et `v1.x` sont ensuite déplacés sur la nouvelle version. Les dépôts clients appellent `@v1`.
+
+## Runners
+
+Tous les jobs tournent sur `ubuntu-26.04`, épinglé : le label `ubuntu-latest` change d'image sans préavis pendant les migrations de GitHub, ce qui n'est pas acceptable pour un pipeline qui dépend de Docker, de `mysql:8.0` et de Python. La montée à une version majeure suivante se fait explicitement, en modifiant cette valeur.

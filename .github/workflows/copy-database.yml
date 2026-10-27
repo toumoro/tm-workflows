@@ -24,7 +24,7 @@ on:
 
 jobs:
   Export:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-26.04
     environment: ${{ inputs.environment }}
     container:
       image: ghcr.io/toumoro/tm-ansible:latest
@@ -84,7 +84,7 @@ jobs:
         retention-days: 1
 
   Upload:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-26.04
     environment: ${{ inputs.environment }}
     permissions:
       id-token: write
@@ -120,7 +120,7 @@ jobs:
     if: ${{ vars.TM_ANONYMIZE == 'true' }} # variable de dépôt, pas d'environnement
     needs: Export
     continue-on-error: true
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-26.04
     environment: ${{ inputs.environment }}
     permissions:
       id-token: write
