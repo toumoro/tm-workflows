@@ -36,26 +36,45 @@ jobs:
           npx semantic-release --dry-run
 
       - name: Semantic Release
+        id: release
         if: github.event_name == 'push'
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        # --match : sans filtre, git describe retourne aussi les tags flottants
+        # (v1, v1.14) et le numéro de version calculé est faux.
         run: |
+          MATCH='v[0-9]*.[0-9]*.[0-9]*'
+          before=$(git describe --tags --abbrev=0 --match "$MATCH" 2>/dev/null || echo none)
+
           npx semantic-release
 
+          git fetch --tags --force
+          after=$(git describe --tags --abbrev=0 --match "$MATCH" 2>/dev/null || echo none)
+
+          echo "version=$after" >> "$GITHUB_OUTPUT"
+          if [ "$before" != "$after" ]; then
+            echo "published=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "published=false" >> "$GITHUB_OUTPUT"
+            echo "Aucune version publiée, tags flottants inchangés."
+          fi
+
+      # Conditionné à une publication : sinon v1 avancerait sur un commit sans version.
       - name: Update floating tags
-        if: github.event_name == 'push'
+        if: github.event_name == 'push' && steps.release.outputs.published == 'true'
+        env:
+          VERSION: ${{ steps.release.outputs.version }}
         run: |
-          VERSION=$(git describe --tags --abbrev=0)
           CLEAN_VERSION=${VERSION#v}
-          
+
           MAJOR=$(echo "$CLEAN_VERSION" | cut -d. -f1)
           MINOR=$(echo "$CLEAN_VERSION" | cut -d. -f1,2)
 
           git config user.name "github-actions"
           git config user.email "github-actions@github.com"
 
-          git tag -f v$MAJOR
-          git push origin v$MAJOR --force
+          git tag -f "v$MAJOR"
+          git push origin "v$MAJOR" --force
 
-          git tag -f v$MINOR
-          git push origin v$MINOR --force
+          git tag -f "v$MINOR"
+          git push origin "v$MINOR" --force
