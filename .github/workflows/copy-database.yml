@@ -1,6 +1,6 @@
 ##
 # Exporte la base de prod vers S3 (latest.sql) et, si TM_ANONYMIZE=true,
-# sa version anonymisée (latest_anonymized.sql). Voir README.md.
+# sa version anonymisée (latest_anonymized.sql.gz). Voir README.md.
 ##
 
 name: Copy Database
@@ -128,7 +128,7 @@ jobs:
     env:
       AWS_REGION: ${{ vars.AWS_REGION || 'ca-central-1' }}
       BUCKET_NAME: ${{ vars.TM_TMDT_BUCKET_NAME }}
-      S3_KEY: ${{ vars.TM_TMDT_PROJECT_NAME }}/latest_anonymized.sql
+      S3_KEY: ${{ vars.TM_TMDT_PROJECT_NAME }}/latest_anonymized.sql.gz
 
     steps:
       - name: Checkout client repo
@@ -170,5 +170,8 @@ jobs:
           role-duration-seconds: 1200
           special-characters-workaround: true
 
+      # Compressé seulement pour S3 : l'artifact est déjà zippé par upload-artifact
       - name: Upload to S3
-        run: aws s3 cp latest_anonymized.sql "s3://${BUCKET_NAME}/${S3_KEY}"
+        run: |
+          gzip -c latest_anonymized.sql > latest_anonymized.sql.gz
+          aws s3 cp latest_anonymized.sql.gz "s3://${BUCKET_NAME}/${S3_KEY}"

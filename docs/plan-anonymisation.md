@@ -26,7 +26,7 @@ Produire, à côté du `latest.sql` actuel, un second fichier **`latest_anonymiz
 | Autres CMS | Entrée `core-rules: none` (ou un autre fichier de `rules/`), `settings.key_column` ou `key:` par table si la clé n'est pas `uid`. MySQL/MariaDB seulement |
 | Tables sans règle | L'anonymisation échoue et liste les tables à classer (liste blanche stricte) |
 | Logs | Jamais de valeurs : uniquement des noms de tables et colonnes et des nombres. Erreurs MySQL réduites à leur code |
-| Format de sortie | `latest_anonymized.sql`, non compressé, comme `latest.sql` |
+| Format de sortie | `latest_anonymized.sql`, envoyé compressé dans S3 (`.sql.gz`) ; l'artifact reste en clair, `upload-artifact` le zippe |
 
 ## Étape 1 : action d'anonymisation (FAITE, commit `930a3b6`)
 
@@ -154,7 +154,7 @@ Job `Anonymize` ajouté **sans toucher** aux jobs `Export` et `Upload` :
 
 - `if: vars.TM_ANONYMIZE == 'true'`, `needs: Export`, `continue-on-error: true`.
 - Récupère le dépôt client (pour `.github/anonymize.yml`), puis `toumoro/tm-workflows` à la référence `tools-ref` dans `.tm-workflows/`, et appelle l'action locale `./.tm-workflows/actions/anonymize-database`.
-- Télécharge l'artifact `db-dump`, anonymise `dump/latest.sql.gz`, envoie `latest_anonymized.sql` dans `<projet>/latest_anonymized.sql` avec le rôle TMDT.
+- Télécharge l'artifact `db-dump`, anonymise `dump/latest.sql.gz`, envoie `latest_anonymized.sql.gz` dans `<projet>/latest_anonymized.sql.gz` avec le rôle TMDT.
 
 Nouvelle entrée du workflow : `tools-ref` (défaut `v1`). `uses:` n'accepte pas d'expression, d'où le `checkout` du dépôt (public) à cette référence.
 
