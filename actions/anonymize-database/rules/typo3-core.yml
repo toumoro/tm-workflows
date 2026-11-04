@@ -134,3 +134,6 @@ tables:
   tx_solr_statistics: truncate             # EXT:solr : IP, feuser_id, mots-clés recherchés
   tx_solr_last_searches: truncate
   "tx_solr_*": keep                        # file d'indexation et caches techniques
+
+  # --- Infrastructure Toumoro -------------------------------------------------
+  _tm_bootstrap: keep                      # sentinelle de l'import initial (cdk-constructs) : à garder
