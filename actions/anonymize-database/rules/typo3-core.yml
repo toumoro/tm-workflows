@@ -137,3 +137,4 @@ tables:
 
   # --- Infrastructure Toumoro -------------------------------------------------
   _tm_bootstrap: keep                      # sentinelle de l'import initial (cdk-constructs) : à garder
+  tx_tmcloudfront_domain_model_invalidation: truncate   # EXT:tm_cloudfront : file d'invalidations CloudFront
