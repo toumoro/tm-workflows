@@ -27,7 +27,7 @@ Variables GitHub transmises aux playbooks : `AWS_SSM_BUCKET`, `TM_INSTANCE_ID`, 
 
 | Job | Rôle |
 |---|---|
-| `Export` | Démarre le bastion (si `ecs`), exporte la base (`DUMP_TYPE=partial`), arrête le bastion, garde le dump en artifact 24 h |
+| `Export` | Démarre le bastion (si `ecs`), exporte la base (`DUMP_TYPE=partial` : sans `be_users`, `sys_domain`, `sys_file_storage` ni `sys_history`), arrête le bastion, garde le dump en artifact 24 h |
 | `Upload` | Envoie `latest.sql` dans `s3://<TM_TMDT_BUCKET_NAME>/<TM_TMDT_PROJECT_NAME>/` |
 | `Anonymize` | Si `TM_ANONYMIZE=true` : envoie `latest_anonymized.sql` au même endroit, et le garde en artifact `db-dump-anonymized` 4 jours (récupérable sans AWS). Un échec n'affecte ni le run ni `latest.sql` |
 
@@ -48,6 +48,7 @@ Appel : `templates/database-export.yml` (lun-ven à 9h UTC, et manuel).
 | `AWS_REGION` | Défaut `ca-central-1` |
 | `ANSIBLE_VERBOSITY`, `ANSIBLE_PYTHON_INTERPRETER` | Options Ansible |
 | `TM_ANONYMIZE` | `true` active `Anonymize`. Variable de **dépôt** (ou d'organisation), pas d'environnement |
+| `TM_DUMP_INCLUDE_TABLES` | Tables exclues du dump `partial` à y remettre, séparées par des virgules. Ex. `sys_file_storage` pour un projet sous DDEV : sans elle, les fichiers des storages autres que 1 sont orphelins. Concerne aussi `latest.sql` : un `tmdt pulldb` remplace alors les storages locaux par ceux de la prod. Seulement pour des storages `Local` ; avec un storage S3 (ex. add-on `ddev-toumoro-rustfs`), valider d'abord. L'anonymisation vide la `configuration` des storages non `Local` |
 
 ## Anonymisation : `actions/anonymize-database`
 
