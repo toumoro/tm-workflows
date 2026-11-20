@@ -92,7 +92,9 @@ tables:
       longitude: empty
   sys_file_processedfile: keep
   sys_file_reference: keep
-  sys_file_storage: keep
+  sys_file_storage:    # exclue du dump « partial » sauf DUMP_INCLUDE_TABLES ; traitée si présente
+    update:            # pilotes distants (S3…) : configuration vidée, elle peut contenir des clés
+      configuration: {sql: "IF(driver = 'Local', configuration, '')"}
   sys_filemounts: keep
 
   # --- Backend et configuration ---------------------------------------------
