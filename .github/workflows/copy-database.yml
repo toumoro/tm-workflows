@@ -37,6 +37,7 @@ jobs:
       AWS_SSM_BUCKET: ${{ vars.TM_SSM_TRANSFER_BUCKET_NAME }}
       TM_INSTANCE_ID: ${{ vars.TM_INSTANCE_ID }}
       DUMP_TYPE: partial
+      DUMP_INCLUDE_TABLES: ${{ vars.TM_DUMP_INCLUDE_TABLES }} # tables réincluses dans le dump partial (tm-ansible)
       SERVER_USERNAME: ${{ vars.SERVER_USER_NAME }}
       CLIENT_PROJECT: ${{ vars.TM_TMDT_PROJECT_NAME }}
       DUMP_INSTANCE_NAME: ${{ vars.TM_DUMP_INSTANCE_NAME }}
